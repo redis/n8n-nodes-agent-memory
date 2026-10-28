@@ -250,8 +250,27 @@ describe('SummaryAwareWindowedChatMemory', () => {
 		const messages = await memory.loadMessages();
 
 		expect(messages.map((m) => m.id)).toEqual([SUMMARY_MESSAGE_ID, 'e6', 'e7', 'e8', 'e9']);
-		expect(messages[0].role).toBe('system');
+		expect(messages[0].role).toBe('user');
 		expect(text(messages[0])).toBe('Summary of the earlier conversation:\nEarlier turns');
+	});
+
+	it('returns stored SYSTEM events as user messages, so the history holds no system message', async () => {
+		const { request } = fakeRequest({
+			[`GET ${SESSION_PATH}`]: {
+				events: [event('e1', 'SYSTEM', 'Be brief'), event('e2', 'USER', 'Hi')],
+			},
+		});
+		const memory = new SummaryAwareWindowedChatMemory(history(request), {
+			windowSize: 10,
+			includeSummary: true,
+		});
+
+		const messages = await memory.loadMessages();
+
+		expect(messages.map((m) => [m.id, m.role, text(m)])).toEqual([
+			['e1', 'user', 'Be brief'],
+			['e2', 'user', 'Hi'],
+		]);
 	});
 
 	it('leaves the summary out when includeSummary is off', async () => {

@@ -92,7 +92,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 			json: true,
 		});
 		expect(chat_history.map((m) => [m.getType(), m.content])).toEqual([
-			['system', [{ type: 'text', text: 'Summary of the earlier conversation:\nEarlier turns' }]],
+			['human', [{ type: 'text', text: 'Summary of the earlier conversation:\nEarlier turns' }]],
 			['human', [{ type: 'text', text: 'Hi' }]],
 			['ai', [{ type: 'text', text: 'Hello' }]],
 		]);
@@ -167,5 +167,22 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		const { ctx } = context({ parameters: { [name]: '  ' } });
 
 		await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
+	});
+
+	it.each([
+		['sessionId', "'Session ID' is empty"],
+		['actorId', "'User ID' is empty"],
+	])('rejects a missing %s with its own message', async (name, message) => {
+		const { ctx } = context({ parameters: { [name]: undefined } });
+
+		await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
+	});
+
+	it('accepts numeric session and user IDs', async () => {
+		const { memory, requests } = await supply({ parameters: { sessionId: 12345, actorId: 678 } });
+
+		await memory.saveContext({ input: 'Hi' }, { output: 'Hello' });
+
+		expect(requests[0].options.body).toMatchObject({ sessionId: '12345', actorId: '678' });
 	});
 });

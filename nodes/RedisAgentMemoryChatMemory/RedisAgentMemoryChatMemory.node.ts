@@ -118,8 +118,10 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 	};
 
 	async supplyData(this: ISupplyDataFunctions, itemIndex: number) {
-		const sessionId = (this.getNodeParameter('sessionId', itemIndex) as string).trim();
-		const actorId = (this.getNodeParameter('actorId', itemIndex) as string).trim();
+		// Expressions can resolve to a number (such as a Telegram chat ID) or to
+		// undefined (when the input has no such field), so coerce before trimming.
+		const sessionId = String(this.getNodeParameter('sessionId', itemIndex) ?? '').trim();
+		const actorId = String(this.getNodeParameter('actorId', itemIndex) ?? '').trim();
 		const options = this.getNodeParameter('options', itemIndex, {}) as MemoryOptions;
 
 		if (!sessionId) {

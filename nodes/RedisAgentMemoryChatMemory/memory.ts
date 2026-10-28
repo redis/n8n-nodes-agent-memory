@@ -1,6 +1,6 @@
 import { BaseChatHistory, WindowedChatMemory, type Message } from '@n8n/ai-node-sdk';
 
-/** Message ID used for the synthetic system message carrying the session summary. */
+/** Message ID used for the synthetic message carrying the session summary. */
 export const SUMMARY_MESSAGE_ID = 'agent-memory-summary';
 
 /**
@@ -159,7 +159,12 @@ export interface SummaryAwareWindowedChatMemoryOptions {
  * The AI Agent reads history through `loadMessages()`, so only the model sees
  * the summary. `WindowedChatMemory` alone keeps the last `windowSize * 2`
  * messages; this variant windows the turns, then adds the summary as a
- * leading system message.
+ * leading user message.
+ *
+ * The Agent's prompt starts with its own system message, so history lands
+ * after it. Some chat models (Anthropic, Gemini) reject a system message in
+ * any other position, so the history this returns has none: the summary and
+ * stored SYSTEM events reach the model as user messages.
  */
 export class SummaryAwareWindowedChatMemory extends WindowedChatMemory {
 	constructor(
@@ -171,13 +176,15 @@ export class SummaryAwareWindowedChatMemory extends WindowedChatMemory {
 
 	async loadMessages(): Promise<Message[]> {
 		const { summary, messages } = await this.agentMemoryHistory.getSession();
-		const windowed = messages.slice(-this.memoryOptions.windowSize * 2);
+		const windowed = messages
+			.slice(-this.memoryOptions.windowSize * 2)
+			.map((message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message));
 		if (!this.memoryOptions.includeSummary || !summary) return windowed;
 
 		return [
 			{
 				id: SUMMARY_MESSAGE_ID,
-				role: 'system',
+				role: 'user',
 				content: [{ type: 'text', text: `Summary of the earlier conversation:\n${summary}` }],
 			},
 			...windowed,
