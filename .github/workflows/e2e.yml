@@ -1,0 +1,92 @@
+# Contract and end-to-end tests against the hosted Agent Memory service.
+#
+# The end-to-end tests run the built package inside a stock n8n container
+# (test/e2e/docker-compose.yml), with the OpenAI API replaced by a stub.
+# See docs/testing.md.
+#
+# ─── ONE-TIME SETUP ────────────────────────────────────────────────────────────
+#
+# Add these repository secrets (Settings → Secrets and variables → Actions):
+#   AGENT_MEMORY_SERVER_URL   Base URL of the Agent Memory test deployment
+#   AGENT_MEMORY_STORE_ID     Store the tests write to
+#   AGENT_MEMORY_API_KEY      API key for that store
+#
+# Without them, for example on pull requests from forks, the tests skip.
+
+name: E2E
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Nightly, to catch changes in the latest n8n release and in the service.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+    inputs:
+      n8n_image_tag:
+        description: 'n8n image tag to test against'
+        required: false
+        default: '2.42.6'
+
+concurrency:
+  group: e2e-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The pinned version on every run; the latest release only on the nightly run.
+        n8n: ${{ github.event_name == 'schedule' && fromJSON('["2.42.6", "latest"]') || fromJSON(format('["{0}"]', inputs.n8n_image_tag || '2.42.6')) }}
+
+    name: E2E (n8n ${{ matrix.n8n }})
+
+    env:
+      AGENT_MEMORY_SERVER_URL: ${{ secrets.AGENT_MEMORY_SERVER_URL }}
+      AGENT_MEMORY_STORE_ID: ${{ secrets.AGENT_MEMORY_STORE_ID }}
+      AGENT_MEMORY_API_KEY: ${{ secrets.AGENT_MEMORY_API_KEY }}
+      N8N_IMAGE_TAG: ${{ matrix.n8n }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: 'npm ci'
+
+      - name: Report missing secrets
+        if: env.AGENT_MEMORY_API_KEY == ''
+        run: echo "::warning::Agent Memory secrets are not available; contract and end-to-end tests will skip."
+
+      - name: Pull images
+        if: env.AGENT_MEMORY_API_KEY != ''
+        run: 'docker compose -f test/e2e/docker-compose.yml pull --quiet'
+
+      - name: Run contract tests
+        run: 'npm run test:contract'
+
+      - name: Run end-to-end tests
+        run: 'npm run test:e2e'
+
+      - name: Upload container logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-n8n-${{ matrix.n8n }}
+          path: test/e2e/.work/docker-compose.log
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: 'docker compose -f test/e2e/docker-compose.yml down --volumes --remove-orphans'

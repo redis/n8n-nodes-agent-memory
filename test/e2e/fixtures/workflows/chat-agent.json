@@ -1,0 +1,149 @@
+{
+	"id": "e2eChatAgent0001",
+	"name": "E2E: Chat agent",
+	"active": true,
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"nodes": [
+		{
+			"id": "node-chat-trigger",
+			"name": "Chat Trigger",
+			"type": "@n8n/n8n-nodes-langchain.chatTrigger",
+			"typeVersion": 1.5,
+			"position": [
+				0,
+				0
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0010",
+			"parameters": {
+				"public": true,
+				"mode": "webhook",
+				"options": {
+					"responseMode": "lastNode",
+					"loadPreviousSession": "memory"
+				}
+			}
+		},
+		{
+			"id": "node-agent",
+			"name": "AI Agent",
+			"type": "@n8n/n8n-nodes-langchain.agent",
+			"typeVersion": 3.1,
+			"position": [
+				260,
+				0
+			],
+			"parameters": {
+				"options": {}
+			}
+		},
+		{
+			"id": "node-model",
+			"name": "OpenAI stub",
+			"type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+			"typeVersion": 1.2,
+			"position": [
+				160,
+				220
+			],
+			"parameters": {
+				"model": {
+					"__rl": true,
+					"mode": "id",
+					"value": "gpt-4o-mini"
+				},
+				"options": {}
+			},
+			"credentials": {
+				"openAiApi": {
+					"id": "e2eOpenAiStub001",
+					"name": "OpenAI stub (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-memory",
+			"name": "Redis Agent Memory",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+			"typeVersion": 1,
+			"position": [
+				320,
+				220
+			],
+			"parameters": {
+				"sessionId": "={{ $json.sessionId }}",
+				"actorId": "={{ 'user-' + $json.sessionId }}",
+				"options": {}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-calculator",
+			"name": "Calculator",
+			"type": "@n8n/n8n-nodes-langchain.toolCalculator",
+			"typeVersion": 1,
+			"position": [
+				480,
+				220
+			],
+			"parameters": {}
+		}
+	],
+	"connections": {
+		"Chat Trigger": {
+			"main": [
+				[
+					{
+						"node": "AI Agent",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"OpenAI stub": {
+			"ai_languageModel": [
+				[
+					{
+						"node": "AI Agent",
+						"type": "ai_languageModel",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Redis Agent Memory": {
+			"ai_memory": [
+				[
+					{
+						"node": "AI Agent",
+						"type": "ai_memory",
+						"index": 0
+					},
+					{
+						"node": "Chat Trigger",
+						"type": "ai_memory",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Calculator": {
+			"ai_tool": [
+				[
+					{
+						"node": "AI Agent",
+						"type": "ai_tool",
+						"index": 0
+					}
+				]
+			]
+		}
+	}
+}

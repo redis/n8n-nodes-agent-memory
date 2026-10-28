@@ -1,0 +1,195 @@
+{
+	"id": "e2eMemoryManager",
+	"name": "E2E: Chat Memory Manager",
+	"active": true,
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"nodes": [
+		{
+			"id": "node-e2e-memory-insert",
+			"name": "Insert webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				0
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0001",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-memory-insert",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-insert-messages",
+			"name": "Insert messages",
+			"type": "@n8n/n8n-nodes-langchain.memoryManager",
+			"typeVersion": 1.1,
+			"position": [
+				260,
+				0
+			],
+			"parameters": {
+				"mode": "insert",
+				"insertMode": "insert",
+				"messages": {
+					"messageValues": [
+						{
+							"type": "user",
+							"message": "={{ $json.body.user }}"
+						},
+						{
+							"type": "ai",
+							"message": "={{ $json.body.ai }}"
+						}
+					]
+				}
+			}
+		},
+		{
+			"id": "node-e2e-memory-load",
+			"name": "Load webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				200
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0002",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-memory-load",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-load-messages",
+			"name": "Load messages",
+			"type": "@n8n/n8n-nodes-langchain.memoryManager",
+			"typeVersion": 1.1,
+			"position": [
+				260,
+				200
+			],
+			"parameters": {
+				"mode": "load",
+				"simplifyOutput": false,
+				"options": {
+					"groupMessages": true
+				}
+			}
+		},
+		{
+			"id": "node-e2e-memory-clear",
+			"name": "Clear webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				400
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0003",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-memory-clear",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-clear-messages",
+			"name": "Clear messages",
+			"type": "@n8n/n8n-nodes-langchain.memoryManager",
+			"typeVersion": 1.1,
+			"position": [
+				260,
+				400
+			],
+			"parameters": {
+				"mode": "delete",
+				"deleteMode": "all"
+			}
+		},
+		{
+			"id": "node-memory",
+			"name": "Redis Agent Memory",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				600
+			],
+			"parameters": {
+				"sessionId": "={{ $json.body.sessionId }}",
+				"actorId": "={{ $json.body.userId }}",
+				"options": {}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		}
+	],
+	"connections": {
+		"Insert webhook": {
+			"main": [
+				[
+					{
+						"node": "Insert messages",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Load webhook": {
+			"main": [
+				[
+					{
+						"node": "Load messages",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Clear webhook": {
+			"main": [
+				[
+					{
+						"node": "Clear messages",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Redis Agent Memory": {
+			"ai_memory": [
+				[
+					{
+						"node": "Insert messages",
+						"type": "ai_memory",
+						"index": 0
+					},
+					{
+						"node": "Load messages",
+						"type": "ai_memory",
+						"index": 0
+					},
+					{
+						"node": "Clear messages",
+						"type": "ai_memory",
+						"index": 0
+					}
+				]
+			]
+		}
+	}
+}

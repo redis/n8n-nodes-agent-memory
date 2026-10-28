@@ -1,0 +1,53 @@
+# End-to-end test stack: a stock n8n with this package installed, and a stub
+# for the OpenAI API. Agent Memory is the hosted service the harness points to
+# with AGENT_MEMORY_* variables, so it is not part of this file.
+#
+# test/e2e/global-setup.ts drives this file; see docs/testing.md.
+name: n8n-agent-memory-e2e
+
+services:
+  llm-stub:
+    image: node:24-alpine
+    command: ['node', '/stub/server.mjs']
+    volumes:
+      - ./llm-stub:/stub:ro
+    ports:
+      - '127.0.0.1:${E2E_LLM_STUB_PORT:-18080}:8080'
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_IMAGE_TAG:-2.42.6}
+    depends_on:
+      - llm-stub
+    ports:
+      - '127.0.0.1:${E2E_N8N_PORT:-15678}:5678'
+    environment:
+      N8N_ENCRYPTION_KEY: e2e-test-encryption-key
+      # n8n v3 turns this default off; packages from ~/.n8n/nodes count as unverified.
+      N8N_UNVERIFIED_PACKAGES_ENABLED: 'true'
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      N8N_DYNAMIC_BANNERS_ENABLED: 'false'
+      N8N_VERSION_NOTIFICATIONS_ENABLED: 'false'
+      N8N_PERSONALIZATION_ENABLED: 'false'
+      N8N_LOG_LEVEL: ${E2E_N8N_LOG_LEVEL:-info}
+      # A preset owner, for logging in from a browser (see OWNER in stack.ts).
+      # The hash is bcrypt of the test password; $$ escapes $ for Compose.
+      N8N_INSTANCE_OWNER_MANAGED_BY_ENV: 'true'
+      N8N_INSTANCE_OWNER_EMAIL: e2e@example.com
+      N8N_INSTANCE_OWNER_PASSWORD_HASH: '$$2a$$10$$HAfbMsT5NCRe6//uP6r4V.T4uk6UnfmyblD6LIPC8GixvLOn5l.B.'
+      N8N_INSTANCE_OWNER_FIRST_NAME: E2E
+      N8N_INSTANCE_OWNER_LAST_NAME: Tester
+      # The editor is served over plain HTTP on 127.0.0.1.
+      N8N_SECURE_COOKIE: 'false'
+      # The URL the browser reaches n8n on. Without it, n8n builds webhook
+      # URLs from its container port, and the editor chat cannot reach them.
+      WEBHOOK_URL: http://127.0.0.1:${E2E_N8N_PORT:-15678}/
+    volumes:
+      - n8n_data:/home/node/.n8n
+      # n8n's community-package folder, holding this package at
+      # node_modules/@redis/n8n-nodes-agent-memory. Node types are then
+      # package-qualified (@redis/n8n-nodes-agent-memory.*), as in production.
+      - ./.work/nodes:/home/node/.n8n/nodes
+      - ./.work/fixtures:/fixtures:ro
+
+volumes:
+  n8n_data:

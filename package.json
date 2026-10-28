@@ -1,0 +1,75 @@
+{
+	"name": "@redis/n8n-nodes-agent-memory",
+	"version": "0.1.0",
+	"description": "Redis Agent Memory for n8n AI Agents: session memory with server-side summarization and long-term memory extraction",
+	"license": "MIT",
+	"homepage": "https://github.com/redis/n8n-nodes-agent-memory#readme",
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"redis",
+		"agent-memory",
+		"ai-agent",
+		"memory"
+	],
+	"author": {
+		"name": "Redis",
+		"email": "tihomir.mateev@redis.com",
+		"url": "https://redis.io"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/redis/n8n-nodes-agent-memory.git"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"typecheck": "tsc -p tsconfig.test.json",
+		"test": "vitest run --project unit",
+		"test:watch": "vitest --project unit",
+		"test:contract": "vitest run --project contract",
+		"test:e2e": "vitest run --project e2e",
+		"e2e:up": "tsx test/e2e/stack-cli.ts up",
+		"e2e:down": "tsx test/e2e/stack-cli.ts down",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"aiNodeSdkVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/RedisAgentMemoryApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "*",
+		"@types/node": "^24.19.1",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^21.1.0",
+		"tsx": "^4.23.15",
+		"typescript": "5.9.2",
+		"vitest": "^5.0.3"
+	},
+	"peerDependencies": {
+		"@n8n/ai-node-sdk": "*",
+		"n8n-workflow": "*"
+	},
+	"bugs": {
+		"url": "https://github.com/redis/n8n-nodes-agent-memory/issues"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	}
+}
