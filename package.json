@@ -27,6 +27,8 @@
 		"dev": "n8n-node dev",
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
+		"format": "prettier --write \"**/*.{ts,js,mjs,cjs}\"",
+		"format:check": "prettier --check \"**/*.{ts,js,mjs,cjs}\"",
 		"typecheck": "tsc -p tsconfig.test.json",
 		"test": "vitest run --project unit",
 		"test:watch": "vitest --project unit",
@@ -48,7 +50,8 @@
 			"dist/credentials/RedisAgentMemoryApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node.js"
+			"dist/nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node.js",
+			"dist/nodes/RedisAgentMemory/RedisAgentMemory.node.js"
 		]
 	},
 	"devDependencies": {
@@ -62,7 +65,7 @@
 		"vitest": "^5.0.3"
 	},
 	"peerDependencies": {
-		"@n8n/ai-node-sdk": "*",
+		"@n8n/ai-node-sdk": ">=0.32.4",
 		"n8n-workflow": "*"
 	},
 	"bugs": {

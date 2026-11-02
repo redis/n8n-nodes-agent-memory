@@ -2,12 +2,12 @@
 
 The tests come in three layers, from fast to realistic. The background and the
 survey of how other community nodes test are in
-[`specs/research.md`](../specs/research.md), §11.
+[`research.md`](research.md), §11.
 
 | Layer | Command | Needs | What it checks |
 |---|---|---|---|
-| Unit | `npm test` | Nothing | The chat history and memory classes, and `supplyData`, against fake HTTP |
-| Contract | `npm run test:contract` | Agent Memory | The chat history class against the real REST API, without n8n |
+| Unit | `npm test` | Nothing | The chat history and memory classes, `supplyData`, the action node's `execute`, and the credential's test request, against fake HTTP |
+| Contract | `npm run test:contract` | Agent Memory | The chat history class, the action node and the credential's test request against the real REST API, without n8n |
 | End-to-end | `npm run test:e2e` | Agent Memory, Docker | The built package inside a real n8n, driven through webhooks |
 | Manual | `npm run e2e:up` / `npm run e2e:down` | Docker | The same n8n, kept running for you to use in a browser |
 
@@ -28,6 +28,15 @@ variables in the environment, or copy [`.env.example`](../.env.example) to
 
 Without them, those tests skip. Only the test harness reads these variables:
 the node never reads the environment, which n8n verification forbids.
+
+One contract test is opt-in: with `AGENT_MEMORY_SUMMARY_TESTS=true` it writes
+40 events to a fresh session, waits for the server's background summary (on
+the hosted store this took about 20 seconds; the test allows 90) and checks
+that the summary reaches the model and not the chat widget. CI sets the
+variable. The same wire shape is also pinned without the network:
+`test/unit/fixtures/session-with-summary.json` is a recorded
+`GET …/session-memory/{sessionId}` response with a real summary, and a unit
+test maps it through the node's classes.
 
 Every run prefixes the session and user IDs it creates with `it-<run>-<random>`,
 and deletes its sessions and the long-term memories of its users at the end.
@@ -72,10 +81,16 @@ The workflows are in `test/e2e/fixtures/workflows/`:
   Trigger, for "Load Previous Session".
 
 The tests in [`test/e2e/memory.test.ts`](../test/e2e/memory.test.ts) cover
-insert and load, separate sessions, clearing, a second turn that sees the
-first, a turn with a tool call, loading a previous session without the
-summary, and history that survives an n8n restart. They also read the stored
-events straight from the Agent Memory API.
+insert and load, separate sessions, clearing, Insert with Override All, a
+second turn that sees the first, a turn with a tool call, loading a previous
+session without the summary, and history that survives an n8n restart. They
+also read the stored events straight from the Agent Memory API.
+
+Each test seeds its own session: the read-only ones write their turns through
+the insert webhook first. So any test can run alone, for example
+`npx vitest run --project e2e -t "tool runs"`, and a failure points at the test
+that owns the data. The restart test is its own `describe` at the end of the
+file, since it restarts the container.
 
 ## Manual testing in a browser
 

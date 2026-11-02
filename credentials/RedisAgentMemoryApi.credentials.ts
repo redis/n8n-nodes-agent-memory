@@ -58,7 +58,9 @@ export class RedisAgentMemoryApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			baseURL: '={{$credentials.serverUrl.replace(/\\/+$/, "")}}',
-			url: '=/v1/stores/{{$credentials.storeId}}/health',
+			// Same encoding as the nodes' request adapter, so the test hits the URL
+			// the nodes will use.
+			url: '=/v1/stores/{{encodeURIComponent($credentials.storeId)}}/health',
 			method: 'GET',
 		},
 	};

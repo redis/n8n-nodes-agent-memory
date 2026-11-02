@@ -14,7 +14,7 @@ import { compose, E2E_DIR, waitForN8n, WORK_DIR } from './harness';
 const ROOT = resolve(E2E_DIR, '..', '..');
 
 /** IDs of the workflows in fixtures/workflows. */
-const WORKFLOW_IDS = ['e2eMemoryManager', 'e2eChatAgent0001'];
+const WORKFLOW_IDS = ['e2eMemoryManager', 'e2eChatAgent0001', 'e2eActionNode001'];
 
 /**
  * The owner account preset by docker-compose.yml, for logging in from a
@@ -72,8 +72,23 @@ export async function startStack(): Promise<void> {
 
 	compose(['down', '--volumes', '--remove-orphans'], { quiet: true });
 	// Seed before the server starts: n8n registers webhooks only at startup.
-	compose(['run', '--rm', '--no-deps', 'n8n', 'import:credentials', '--input=/fixtures/credentials.json']);
-	compose(['run', '--rm', '--no-deps', 'n8n', 'import:workflow', '--separate', '--input=/fixtures/workflows']);
+	compose([
+		'run',
+		'--rm',
+		'--no-deps',
+		'n8n',
+		'import:credentials',
+		'--input=/fixtures/credentials.json',
+	]);
+	compose([
+		'run',
+		'--rm',
+		'--no-deps',
+		'n8n',
+		'import:workflow',
+		'--separate',
+		'--input=/fixtures/workflows',
+	]);
 	// In regular mode, import cannot activate workflows; publishing does.
 	for (const id of WORKFLOW_IDS) {
 		compose(['run', '--rm', '--no-deps', 'n8n', 'publish:workflow', `--id=${id}`]);
@@ -93,7 +108,10 @@ export async function startStack(): Promise<void> {
 export function stopStack(): void {
 	try {
 		mkdirSync(WORK_DIR, { recursive: true });
-		writeFileSync(resolve(WORK_DIR, 'docker-compose.log'), compose(['logs', '--no-color'], { quiet: true }));
+		writeFileSync(
+			resolve(WORK_DIR, 'docker-compose.log'),
+			compose(['logs', '--no-color'], { quiet: true }),
+		);
 	} catch {
 		// No stack, or Docker is unavailable: nothing to save.
 	}

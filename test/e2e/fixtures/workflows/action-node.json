@@ -1,0 +1,264 @@
+{
+	"id": "e2eActionNode001",
+	"name": "E2E: Redis Agent Memory action node",
+	"active": true,
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"nodes": [
+		{
+			"id": "node-e2e-action-memory-create",
+			"name": "memory-create webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				0
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0020",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-create",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-create",
+			"name": "Action: memory-create",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				0
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "create",
+				"text": "={{ $json.body.text }}",
+				"ownerId": "={{ $json.body.userId }}",
+				"additionalFields": {}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-memory-search",
+			"name": "memory-search webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				200
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0021",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-search",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-search",
+			"name": "Action: memory-search",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				200
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "search",
+				"query": "={{ $json.body.query }}",
+				"ownerId": "={{ $json.body.userId }}",
+				"maxResults": 5,
+				"options": {}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-memory-delete",
+			"name": "memory-delete webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				400
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0022",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-delete",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-delete",
+			"name": "Action: memory-delete",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				400
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "delete",
+				"memoryId": "={{ $json.body.memoryId }}"
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-session-get",
+			"name": "session-get webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				600
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0023",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-session-get",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-session-get",
+			"name": "Action: session-get",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				600
+			],
+			"parameters": {
+				"resource": "session",
+				"operation": "get",
+				"sessionId": "={{ $json.body.sessionId }}",
+				"options": {}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-event-delete",
+			"name": "event-delete webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				800
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0024",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-event-delete",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-event-delete",
+			"name": "Action: event-delete",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				800
+			],
+			"parameters": {
+				"resource": "session",
+				"operation": "deleteEvent",
+				"sessionId": "={{ $json.body.sessionId }}",
+				"eventId": "={{ $json.body.eventId }}"
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		}
+	],
+	"connections": {
+		"memory-create webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-create",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"memory-search webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-search",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"memory-delete webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-delete",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"session-get webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: session-get",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"event-delete webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: event-delete",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	}
+}

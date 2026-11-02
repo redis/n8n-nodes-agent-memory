@@ -75,6 +75,9 @@ jobs:
 
       - name: Run contract tests
         run: 'npm run test:contract'
+        env:
+          # Also wait for a real server summary (about 20 s on the hosted store).
+          AGENT_MEMORY_SUMMARY_TESTS: 'true'
 
       - name: Run end-to-end tests
         run: 'npm run test:e2e'

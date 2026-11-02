@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { IHttpRequestOptions, INode, ISupplyDataFunctions } from 'n8n-workflow';
 import { RedisAgentMemoryChatMemory } from '../../nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node';
+import { NOT_FOUND_ERROR_TYPE } from '../../nodes/shared/agentMemoryRequest';
 
 /** A LangChain message, as far as these tests read it. */
 interface BaseMessage {
@@ -30,16 +31,30 @@ const NODE: INode = {
 	parameters: {},
 };
 
-function httpError(status: number) {
+/** An HTTP failure as n8n's request helper surfaces it; `data` is the parsed body. */
+function httpError(status: number, data?: unknown) {
 	return Object.assign(new Error(`Request failed with status code ${status}`), {
 		httpCode: String(status),
-		response: { status },
+		response: { status, data },
 	});
 }
 
+/** The body the API returns for a missing session (verified against the service). */
+const SESSION_NOT_FOUND = {
+	type: NOT_FOUND_ERROR_TYPE,
+	title: 'Session Not Found',
+	status: 404,
+	detail: 'The requested session was not found',
+};
+
 function context({ parameters = {}, credentials = {}, respond = () => ({}) }: Setup) {
 	const requests: Array<{ credentialType: string; options: IHttpRequestOptions }> = [];
-	const params: Record<string, unknown> = { sessionId: 's-1', actorId: 'user-1', options: {}, ...parameters };
+	const params: Record<string, unknown> = {
+		sessionId: 's-1',
+		actorId: 'user-1',
+		options: {},
+		...parameters,
+	};
 
 	const ctx = {
 		getNode: () => NODE,
@@ -92,7 +107,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 			json: true,
 		});
 		expect(chat_history.map((m) => [m.getType(), m.content])).toEqual([
-			['system', [{ type: 'text', text: 'Summary of the earlier conversation:\nEarlier turns' }]],
+			['human', [{ type: 'text', text: 'Summary of the earlier conversation:\nEarlier turns' }]],
 			['human', [{ type: 'text', text: 'Hi' }]],
 			['ai', [{ type: 'text', text: 'Hello' }]],
 		]);
@@ -117,7 +132,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 	it('treats an unknown session as empty', async () => {
 		const { memory } = await supply({
 			respond: () => {
-				throw httpError(404);
+				throw httpError(404, SESSION_NOT_FOUND);
 			},
 		});
 
@@ -126,14 +141,38 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		expect(chat_history).toEqual([]);
 	});
 
-	it('fails the run for other API errors', async () => {
+	it('fails the run for a 404 that is not the API not-found, such as a wrong URL', async () => {
+		const { memory } = await supply({
+			respond: () => {
+				throw httpError(404, '404 page not found');
+			},
+		});
+
+		// supplyMemory rethrows the adapter's NodeApiError as a NodeOperationError
+		// with the same message (from the SDK's own copy of n8n-workflow, so the
+		// class is matched by name); the adapter's tests pin the status code.
+		const call = memory.loadMemoryVariables({});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: 'The resource you are requesting could not be found',
+		});
+	});
+
+	it('fails the run for other API errors, with the status-specific message', async () => {
 		const { memory } = await supply({
 			respond: () => {
 				throw httpError(401);
 			},
 		});
 
-		await expect(memory.loadMemoryVariables({})).rejects.toThrow();
+		// The SDK's log wrapper rethrows the adapter's NodeApiError as a
+		// NodeOperationError (from its own copy of n8n-workflow, hence no
+		// instanceof) and keeps the message; the adapter's tests pin the status.
+		await expect(memory.loadMemoryVariables({})).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: 'Authorization failed - please check your credentials',
+		});
 	});
 
 	it('saves a turn as two session events with the user ID and namespace', async () => {
@@ -167,5 +206,22 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		const { ctx } = context({ parameters: { [name]: '  ' } });
 
 		await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
+	});
+
+	it.each([
+		['sessionId', "'Session ID' is empty"],
+		['actorId', "'User ID' is empty"],
+	])('rejects a missing %s with its own message', async (name, message) => {
+		const { ctx } = context({ parameters: { [name]: undefined } });
+
+		await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
+	});
+
+	it('accepts numeric session and user IDs', async () => {
+		const { memory, requests } = await supply({ parameters: { sessionId: 12345, actorId: 678 } });
+
+		await memory.saveContext({ input: 'Hi' }, { output: 'Hello' });
+
+		expect(requests[0].options.body).toMatchObject({ sessionId: '12345', actorId: '678' });
 	});
 });

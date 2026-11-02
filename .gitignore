@@ -2,3 +2,7 @@ dist
 node_modules
 .env
 test/e2e/.work
+
+# IDE settings
+.idea/
+.vscode/

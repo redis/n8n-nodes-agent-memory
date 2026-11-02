@@ -17,7 +17,9 @@ export default async function setup(): Promise<(() => void) | undefined> {
 
 	return () => {
 		if (process.env.E2E_KEEP_STACK === 'true') {
-			console.warn('[e2e] E2E_KEEP_STACK=true: leaving the stack running. Stop it with: npm run e2e:down');
+			console.warn(
+				'[e2e] E2E_KEEP_STACK=true: leaving the stack running. Stop it with: npm run e2e:down',
+			);
 			return;
 		}
 		stopStack();

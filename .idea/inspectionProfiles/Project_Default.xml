@@ -1,6 +1,0 @@
-<component name="InspectionProjectProfileManager">
-  <profile version="1.0">
-    <option name="myName" value="Project Default" />
-    <inspection_tool class="Eslint" enabled="$TS_NODE_TRANSPILE_ONLY$" level="WARNING" enabled_by_default="$TS_NODE_TRANSPILE_ONLY$" />
-  </profile>
-</component>

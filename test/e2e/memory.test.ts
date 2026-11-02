@@ -15,25 +15,53 @@ import {
 	type StubRequest,
 } from './harness';
 
+interface Session {
+	sessionId: string;
+	userId: string;
+}
+
 /**
  * Runs the node inside a real n8n (see docker-compose.yml), against the hosted
  * Agent Memory service, with the OpenAI API replaced by a stub.
+ *
+ * Every test seeds its own session, through the Memory Manager's insert
+ * webhook where it needs history, so each one can run alone with `-t` and a
+ * failure points at the test that owns the data.
  */
 describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}`, () => {
 	const client = new AgentMemoryTestClient(agentMemoryConfig!);
 	let counter = 0;
 
-	function newSession(label: string) {
+	function newSession(label: string): Session {
 		counter += 1;
-		const sessionId = `${runPrefix}-e2e-${label}-${counter}`;
-		return { sessionId, userId: `${runPrefix}-user-${counter}` };
+		const session = {
+			sessionId: `${runPrefix}-e2e-${label}-${counter}`,
+			userId: `${runPrefix}-user-${counter}`,
+		};
+		client.track(session.sessionId, session.userId);
+		return session;
 	}
 
-	/** The chat workflow derives the user ID from the session ID. */
-	function newChatSession(label: string) {
-		const { sessionId } = newSession(label);
-		client.track(sessionId, `user-${sessionId}`);
-		return sessionId;
+	/** The chat workflow derives the user ID from the session ID; seeded turns must match. */
+	function newChatSession(label: string): Session {
+		counter += 1;
+		const sessionId = `${runPrefix}-e2e-${label}-${counter}`;
+		const session = { sessionId, userId: `user-${sessionId}` };
+		client.track(session.sessionId, session.userId);
+		return session;
+	}
+
+	/** Writes one user/assistant turn through the node, with no model involved. */
+	async function insert(session: Session, user: string, ai: string) {
+		await postJson('/webhook/e2e-memory-insert', { ...session, user, ai });
+	}
+
+	async function load(session: Session) {
+		const [result] = await postJson<Array<{ messages: SerializedMessage[] }>>(
+			'/webhook/e2e-memory-load',
+			session,
+		).then((r) => (Array.isArray(r) ? r : [r]));
+		return result.messages;
 	}
 
 	async function storedTexts(sessionId: string): Promise<Array<[string, string]>> {
@@ -41,24 +69,23 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 		return (session?.events ?? []).map((e) => [e.role, e.content.map((c) => c.text).join('')]);
 	}
 
+	function lastRequestFor(requests: StubRequest[], chatInput: string): StubRequest {
+		const request = requests.find((r) =>
+			r.messages.some((m) => m.role === 'user' && stubMessageText(m) === chatInput),
+		);
+		if (!request) throw new Error(`The model never received "${chatInput}"`);
+		return request;
+	}
+
+	beforeEach(async () => {
+		await resetStub();
+	});
+
 	afterAll(async () => {
 		await client.cleanup();
 	});
 
 	describe('Chat Memory Manager, no model', () => {
-		async function insert(session: { sessionId: string; userId: string }, user: string, ai: string) {
-			client.track(session.sessionId, session.userId);
-			await postJson('/webhook/e2e-memory-insert', { ...session, user, ai });
-		}
-
-		async function load(session: { sessionId: string; userId: string }) {
-			const [result] = await postJson<Array<{ messages: SerializedMessage[] }>>(
-				'/webhook/e2e-memory-load',
-				session,
-			).then((r) => (Array.isArray(r) ? r : [r]));
-			return result.messages;
-		}
-
 		it('inserts messages through the node and loads them back', async () => {
 			const session = newSession('manager');
 
@@ -86,6 +113,26 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 			expect(await load(b)).toEqual([]);
 		});
 
+		it('replaces the session with Insert > Override All', async () => {
+			const session = newSession('manager-override');
+			await insert(session, 'Old question', 'Old answer');
+
+			await postJson('/webhook/e2e-memory-override', {
+				...session,
+				user: 'New question',
+				ai: 'New answer',
+			});
+
+			expect((await load(session)).map((m) => messageText(m))).toEqual([
+				'New question',
+				'New answer',
+			]);
+			expect(await storedTexts(session.sessionId)).toEqual([
+				['USER', 'New question'],
+				['ASSISTANT', 'New answer'],
+			]);
+		});
+
 		it('clears a session', async () => {
 			const session = newSession('manager-clear');
 			await insert(session, 'Forget me', 'Forgotten');
@@ -98,30 +145,15 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 	});
 
 	describe('AI Agent with the Chat Trigger', () => {
-		const sessionId = newChatSession('chat');
+		it('stores a turn and sends it to the model on the next turn', async () => {
+			const { sessionId } = newChatSession('chat');
 
-		beforeEach(async () => {
-			await resetStub();
-		});
-
-		function lastRequestFor(requests: StubRequest[], chatInput: string): StubRequest {
-			const request = requests.find((r) =>
-				r.messages.some((m) => m.role === 'user' && stubMessageText(m) === chatInput),
-			);
-			if (!request) throw new Error(`The model never received "${chatInput}"`);
-			return request;
-		}
-
-		it('answers the first turn and stores it', async () => {
 			expect(await sendChatMessage(sessionId, 'My name is Ada.')).toBe('Echo: My name is Ada.');
-
 			expect(await storedTexts(sessionId)).toEqual([
 				['USER', 'My name is Ada.'],
 				['ASSISTANT', 'Echo: My name is Ada.'],
 			]);
-		});
 
-		it('sends the earlier turn to the model on the next turn', async () => {
 			await sendChatMessage(sessionId, 'What is my name?');
 
 			const request = lastRequestFor(await stubRequests(), 'What is my name?');
@@ -135,22 +167,28 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 		// filter. The unit and contract tests cover the filter itself; this one
 		// checks what users get.
 		it('stores only the question and the answer when a tool runs', async () => {
-			const toolSession = newChatSession('tool');
+			const { sessionId } = newChatSession('tool');
 
-			expect(await sendChatMessage(toolSession, 'calculate 2+2')).toBe('The answer is 4.');
+			expect(await sendChatMessage(sessionId, 'calculate 2+2')).toBe('The answer is 4.');
 
 			const requests = await stubRequests();
 			expect(requests.some((r) => r.messages.some((m) => m.role === 'tool'))).toBe(true);
-			expect(await storedTexts(toolSession)).toEqual([
+			expect(await storedTexts(sessionId)).toEqual([
 				['USER', 'calculate 2+2'],
 				['ASSISTANT', 'The answer is 4.'],
 			]);
 		});
 
-		it('returns the history to the chat widget without system messages', async () => {
-			const messages = await loadPreviousSession(sessionId);
+		// This session has no server summary, so it cannot show that the summary
+		// stays out of the widget; the contract test "server summary" and the
+		// recorded-session unit test cover that. This checks the plain path.
+		it('returns the seeded history to the chat widget', async () => {
+			const session = newChatSession('widget');
+			await insert(session, 'My name is Ada.', 'Echo: My name is Ada.');
+			await insert(session, 'What is my name?', 'Echo: What is my name?');
 
-			expect(messages.map((m) => messageType(m))).not.toContain('SystemMessage');
+			const messages = await loadPreviousSession(session.sessionId);
+
 			expect(messages.map((m) => [messageType(m), messageText(m)])).toEqual([
 				['HumanMessage', 'My name is Ada.'],
 				['AIMessage', 'Echo: My name is Ada.'],
@@ -158,14 +196,23 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 				['AIMessage', 'Echo: What is my name?'],
 			]);
 		});
+	});
 
+	// Last, and on its own: restarting the container is slow and would disturb
+	// any test running alongside it.
+	describe('n8n restart', () => {
 		it('keeps the history across an n8n restart', async () => {
+			const session = newChatSession('restart');
+			await insert(session, 'My name is Ada.', 'Echo: My name is Ada.');
+
 			await restartN8n();
 
-			const messages = await loadPreviousSession(sessionId);
-			expect(messages).toHaveLength(4);
+			expect((await loadPreviousSession(session.sessionId)).map((m) => messageText(m))).toEqual([
+				'My name is Ada.',
+				'Echo: My name is Ada.',
+			]);
 
-			await sendChatMessage(sessionId, 'Still there?');
+			await sendChatMessage(session.sessionId, 'Still there?');
 			const request = lastRequestFor(await stubRequests(), 'Still there?');
 			expect(request.messages.map((m) => stubMessageText(m))).toContain('My name is Ada.');
 		});

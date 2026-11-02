@@ -115,8 +115,51 @@
 			}
 		},
 		{
+			"id": "node-e2e-memory-override",
+			"name": "Override webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				800
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0004",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-memory-override",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-override-messages",
+			"name": "Override messages",
+			"type": "@n8n/n8n-nodes-langchain.memoryManager",
+			"typeVersion": 1.1,
+			"position": [
+				260,
+				800
+			],
+			"parameters": {
+				"mode": "insert",
+				"insertMode": "override",
+				"messages": {
+					"messageValues": [
+						{
+							"type": "user",
+							"message": "={{ $json.body.user }}"
+						},
+						{
+							"type": "ai",
+							"message": "={{ $json.body.ai }}"
+						}
+					]
+				}
+			}
+		},
+		{
 			"id": "node-memory",
-			"name": "Redis Agent Memory",
+			"name": "Redis Agent Chat Memory",
 			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
 			"typeVersion": 1,
 			"position": [
@@ -170,7 +213,7 @@
 				]
 			]
 		},
-		"Redis Agent Memory": {
+		"Redis Agent Chat Memory": {
 			"ai_memory": [
 				[
 					{
@@ -186,6 +229,22 @@
 					{
 						"node": "Clear messages",
 						"type": "ai_memory",
+						"index": 0
+					},
+					{
+						"node": "Override messages",
+						"type": "ai_memory",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Override webhook": {
+			"main": [
+				[
+					{
+						"node": "Override messages",
+						"type": "main",
 						"index": 0
 					}
 				]
