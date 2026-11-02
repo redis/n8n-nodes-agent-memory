@@ -1,13 +1,15 @@
 # Research: Redis Agent Memory as an n8n community node
 
-_Last updated: 2026-10-09_
+_Last updated: 2026-11-02_
 
 This document records the background research behind `@redis/n8n-nodes-agent-memory`:
 
 - why a dedicated node is worth building when n8n can already make HTTP requests;
 - what n8n requires for verification;
 - how comparable vendors have built their nodes;
-- how Agent Memory compares with plain Redis inside n8n workflows.
+- how Agent Memory's short-term and long-term memory fit n8n's memory model;
+- how Agent Memory compares with plain Redis inside n8n workflows;
+- how to run integration tests inside a real n8n, and how other community nodes do it.
 
 ## Contents
 
@@ -19,9 +21,11 @@ This document records the background research behind `@redis/n8n-nodes-agent-mem
 6. [Comparable vendor nodes](#6-comparable-vendor-nodes)
 7. [Existing agent-memory community nodes](#7-existing-agent-memory-community-nodes)
 8. [Building a memory sub-node: `@n8n/ai-node-sdk`](#8-building-a-memory-sub-node-n8nai-node-sdk)
-9. [Agent Memory vs. plain Redis in n8n workflows](#9-agent-memory-vs-plain-redis-in-n8n-workflows)
-10. [Recommendations and open questions](#10-recommendations-and-open-questions)
-11. [Sources](#11-sources)
+9. [Short-term and long-term memory in n8n](#9-short-term-and-long-term-memory-in-n8n)
+10. [Agent Memory vs. plain Redis in n8n workflows](#10-agent-memory-vs-plain-redis-in-n8n-workflows)
+11. [Integration testing](#11-integration-testing)
+12. [Recommendations and open questions](#12-recommendations-and-open-questions)
+13. [Sources](#13-sources)
 
 ---
 
@@ -40,6 +44,8 @@ This document records the background research behind `@redis/n8n-nodes-agent-mem
   - long threads kept coherent by summarization;
   - automatic fact extraction;
   - memory shared with non-n8n agents.
+- **Testing.** n8n publishes no test harness for community nodes, and most vendor nodes have unit tests at best. The realistic option is a pinned `n8nio/n8n` container with the built package mounted, workflows seeded through the n8n CLI, and a stub OpenAI server for the model. Couchbase's node is the reference (§11).
+- **Short-term vs. long-term.** n8n's memory slot is a chat-history contract for one session, so Agent Memory's short-term (session) memory fits it directly. Long-term memory does not: the slot gets no query, so recall needs a tool, a search step before the agent, or opt-in injection (§9).
 
 ## 2. The Agent Memory TypeScript SDK
 
@@ -155,9 +161,9 @@ Source: [Community Node Verification Guidelines](https://docs.n8n.io/connect/cre
     - `@redis-iris/n8n-nodes-agent-memory`: sits next to the SDK, but is less recognisable to n8n users.
     - `n8n-nodes-redis-agent-memory`: the fallback if nobody can publish under a scope.
 - **GitHub:** `github.com/redis/n8n-nodes-agent-memory`. `repository.url` must point to this exact public repo, and the publish workflow must run from it, because provenance records the source repo.
-- **Inside the package:**
-  - Memory sub-node: "Redis Agent Memory". It appears next to "Redis Chat Memory", so the difference is clear.
-  - Tools: "Redis Agent Memory Tool", or separate "Search Agent Memory" / "Save to Agent Memory".
+- **Inside the package** _(revised 2026-11-02)_:
+  - Action node: **"Redis Agent Memory"**, the plain product name. n8n and the verified vendors give the plain name to the action node and a qualified name to the memory sub-node ("Redis" / "Redis Chat Memory", "Postgres" / "Postgres Chat Memory", "Cognee" / "Cognee Memory"). It is one node with three resources and `usableAsTool`, so the earlier idea of a separate "Redis Agent Memory Tool" or "Search Agent Memory" tool node does not apply.
+  - Memory sub-node: **"Redis Agent Chat Memory"**. It reads like its neighbours in the Memory slot picker ("Redis Chat Memory", "Postgres Chat Memory"), and "Agent" marks it as the Agent Memory product's. The first draft called both nodes "Redis Agent Memory", which put two identical entries in the main node search and in the tool picker, told apart only by their descriptions. The internal name stays `redisAgentMemoryChatMemory`. "Redis Agent Memory Chat Memory" would keep the full product name but is clumsy.
   - Credential: "Redis Agent Memory API" (`redisAgentMemoryApi`).
 - **Before publishing:** publish rights on the `@redis` npm scope are needed. The current `@redis/client` maintainers can publish or grant access.
 
@@ -207,6 +213,7 @@ This is a survey of npm packages (inspected 2026-10-01). "Memory sub-node" means
 - Cognee is the reference implementation to copy: a verified vendor node with a memory sub-node and a tool node, zero dependencies, and the official AI SDK. Source: [topoteretes/cognee-integrations/integrations/n8n](https://github.com/topoteretes/cognee-integrations/tree/main/integrations/n8n).
 - No database vendor has an official memory node, and there is no verified Zep or Mem0 memory sub-node. That is an opening for a first-party Redis node.
 - **Caveat:** Cognee's _package_ is verified, but its memory sub-node only arrived in 0.7.0 (September 2026). Whether AI SDK-based sub-nodes pass review has not been confirmed with n8n.
+- **How Cognee's memory sub-node works (read 2026-11-02).** On every agent turn it (1) loads the last _Window Size_ Q&A pairs from the session, (2) if _Recall Context_ is on, queries the knowledge graph with the incoming question and adds the result as one extra system message that is never written to the session, and (3) saves the user message and reply as one session entry. A fourth, periodic step, _Promote To Graph_ (every N hours, after each execution, or never), pushes session turns into the graph through the "improve" endpoint; without it long-term memory never changes. Its README states that the Chat Memory Manager's _Delete Messages_ and _Insert with Override All_ fail with an error, because clearing a session is not supported. The action node (`usableAsTool`) is attached to the Tool port for searches the agent chooses to run. Mem0's documented agent pattern is two instances of its action node on the Tool port, one pinned to _Search_ and one to _Add_, with _User ID_ a fixed parameter kept the same on both.
 
 ## 8. Building a memory sub-node: `@n8n/ai-node-sdk`
 
@@ -241,7 +248,100 @@ HTTP calls go through `this.helpers.httpRequestWithAuthentication`, using the cr
 - `programmatic/custom-chat-model`
 - `programmatic/custom-chat-model-example`
 
-## 9. Agent Memory vs. plain Redis in n8n workflows
+## 9. Short-term and long-term memory in n8n
+
+This section maps Agent Memory's two kinds of memory onto the places n8n uses memory. The findings come from n8n's source (`master`, read 2026-10-09) and `@n8n/ai-utilities` 0.32.4, which `@n8n/ai-node-sdk` re-exports.
+
+### 9.1 The two kinds of memory in Agent Memory
+
+| | Short-term (session memory) | Long-term (memory records) |
+|---|---|---|
+| Unit | Ordered events: `role`, `content`, `actorId` | Facts: `text`, `memoryType`, `topics`, `attributes` |
+| Key | `sessionId` | `ownerId` (a user), optionally a namespace |
+| Lifetime | One conversation; older turns fold into a summary | Across all of a user's conversations |
+| Read | `GET …/session-memory/{sessionId}` returns the summary and recent events | Semantic search with filters |
+| Write | `POST …/session-memory/events` | Extracted by the server from session events, or created directly |
+
+The two are linked. Each session event carries an `actorId` and optional `namespaceRef`, and the server extracts long-term memories from those events. **Writing short-term memory therefore writes long-term memory as a side effect.** Only reading long-term memory needs a separate path.
+
+### 9.2 What n8n means by "memory"
+
+n8n has one memory abstraction: the chat history of one session. Every node with an `ai_memory` input uses the same contract.
+
+| Consumer | What it calls | When |
+|---|---|---|
+| AI Agent, memory slot | `loadMemoryVariables({})`, which returns `chat_history` | Before each run |
+| | `saveContext({ input }, { output })`, or `chatHistory.addMessages([...])` when tools ran | After each run |
+| Chat Trigger, "Load Previous Session: From Memory" | `chatHistory.getMessages()`, dropping messages marked `hideFromUI` | When the hosted chat widget opens |
+| Chat Memory Manager | `chatHistory.getMessages()`, `clear()`, `addMessage()` | Load, Insert and Delete modes |
+| OpenAI Assistant (v1) | `loadMemoryVariables` / `saveContext` | Before and after each run |
+
+What the source shows about this contract:
+
+1. **Loading gets no input.** The Agent's `loadMemory()` calls `memory.loadMemoryVariables({})`, and the SDK's `LangchainMemoryAdapter` ignores the argument anyway. A memory node cannot see the user's message through the call. It can still read it through a parameter: sub-node parameters resolve against the agent's input item, which is why `{{ $json.sessionId }}` works, and `{{ $json.chatInput }}` works the same way.
+2. **Saving has two paths.** Without tool calls, the Agent calls `saveContext`, which reaches the SDK's `saveTurn(input, output)`. With tool calls, `saveToMemory()` skips `saveContext` and calls `chatHistory.addMessages()` with the full sequence: the user message, AI messages that carry tool calls, tool results, and the final answer.
+3. **The Agent trims again.** With `maxTokensFromMemory` set, the Agent trims history by tokens and keeps system messages (`includeSystem: true`), so a leading summary survives.
+4. **One memory per consumer.** The Agent's and the Chat Trigger's memory inputs both have `maxConnections: 1`. An agent cannot use Redis Chat Memory for short-term memory and Agent Memory for long-term memory at the same time through the slot.
+5. **SDK messages carry only role and content.** The SDK's message converter drops LangChain's `additional_kwargs`, so a node built on `@n8n/ai-node-sdk` cannot mark a message `hideFromUI`.
+6. **Two layers, two entry points.** `supplyMemory()` wraps a `ChatMemory` (which has `loadMessages`) around a `ChatHistory` (which has `getMessages`). The Agent reads through `loadMessages`. The Chat Trigger and the Chat Memory Manager read `chatHistory.getMessages()` directly. So anything added in `loadMessages` reaches the model but not the chat widget or the Memory Manager.
+
+### 9.3 Short-term memory fits the memory slot
+
+The contract matches session memory almost one to one:
+
+| n8n call | Agent Memory |
+|---|---|
+| `getMessages` / `loadMessages` | `GET …/session-memory/{sessionId}`: summary (as a system message) plus events |
+| `addMessage` / `saveTurn` | `POST …/session-memory/events`, one event per message |
+| `clear` | `DELETE …/session-memory/{sessionId}` |
+
+This is what the scaffolded `RedisAgentMemoryChatMemory` node does. It also fills a gap: n8n's earlier memory-server nodes, Zep and Motorhead, offered server-side summaries but are now deprecated and hidden from the node panel.
+
+**Friction points, with fixes:**
+
+- **The summary leaks into the chat widget.** The node adds the summary in `getMessages`, so the Chat Trigger returns it when the widget loads a previous session. The widget labels every message that isn't a `HumanMessage` as `bot`, so the summary appears as a bot reply, and the SDK cannot hide it (point 5). The widget also reads `kwargs.content` as text, but SDK messages carry an array of content blocks; rendering in the hosted chat needs a test. **Fix:** add the summary in `loadMessages` (the memory class), not in `getMessages` (the history class). Point 6 means the model still gets it and the widget does not.
+- **Chat Memory Manager's "Delete last N" rebuilds the session.** It reads all messages, calls `clear()`, then re-adds the rest one at a time. On Agent Memory that deletes the server summary, posts the summary back as a `SYSTEM` event, gives every event a new ID and timestamp, and may trigger extraction again, which risks duplicate long-term memories. "Insert" with "Override All" also calls `clear()`. **Fix:** the change above keeps the summary out of the re-added messages. Document "Delete last N" as unsupported; the action node's per-event delete is the safe alternative. _(2026-11-02: "Insert > Override All" is a delete and repost by design, so losing the summary and extracting from the new events is the intended result; only "Delete last N" misbehaves. Cognee's sub-node makes `clear()` throw, which blocks both operations; we cannot copy that because our `clear()` is the real "Delete > All", and the SDK's `ChatHistory` interface, with only `getMessages`, `addMessage(s)` and `clear`, gives the node no way to tell a rebuild from a delete followed by an insert. The README's "Chat Memory Manager" note records the outcome.)_
+- **Tool-call messages become extra assistant events.** When tools ran, the AI messages that carry tool calls arrive through `addMessages` with role `assistant`. The node drops tool results but would store any text in those messages, including n8n's synthetic "Calling X with input: …". **Fix:** skip assistant messages that contain tool-call blocks. (Done. On n8n 2.42.6, the end-to-end tests show this message arriving with no text, so nothing extra was stored there; the filter guards the synthetic-message case and other versions.)
+- **History is windowed three times.** The server keeps recent events and summarizes the rest, the node applies Context Window Length, and the Agent may trim by tokens. **Fix:** treat the server as the main control. Keep a generous default window and say in the parameter description that older turns live in the summary.
+- **The session ID is not a user ID.** The Chat Trigger supplies a `sessionId`, which the hosted widget keeps per browser in `localStorage`, but no user identity. Long-term memory is keyed by user, so cross-session recall needs a stable user ID: from the embedded chat's `metadata`, or a Telegram or Slack user ID. If a workflow passes the session ID as the user ID, long-term memory still works, but only within that session.
+
+### 9.4 Long-term memory does not fit the memory slot
+
+Writes need nothing extra: they happen through extraction (§9.1). Reads need a query, and the slot has none (point 1). There are three ways to read long-term memory:
+
+| Option | How it works | For | Against |
+|---|---|---|---|
+| **A. Agent tool** | The action node with `usableAsTool`, or a dedicated tool node. The agent calls _Search memory_ or _Save memory_ when it judges it useful. This is the Mem0 and Cognee pattern. | Searches only when useful. Explicit saves. Each call shows in the execution log. | Depends on the model choosing to call it. Adds a model round trip. |
+| **B. Search before the agent** | The action node runs a search on `{{ $json.chatInput }}` before the agent, and the system prompt includes the results through an expression. | Plain n8n: explicit and easy to debug. | Wiring in every workflow. |
+| **C. Injection by the memory node** | An opt-in "Recall Long-Term Memories" option. In `loadMessages`, the node searches on a query parameter (default `{{ $json.chatInput }}`) and adds the results as a system message. | No wiring; works with any agent. | A search on every turn, which adds latency. The query is only the latest message. |
+
+**Two rules for every option:**
+
+- **The workflow sets the user ID; the model never does.** In tool mode, `ownerId` must be a fixed node parameter, not an argument the model fills in. Otherwise a prompt could read another user's memories.
+- **Expect a short lag.** Extraction is asynchronous, so a fact said in this turn may not be searchable in the next one. The session history covers that gap.
+
+Option C must live in `loadMessages`, for the same reason as the summary: the recalled facts then reach the model but never the chat widget, the Memory Manager or the session's stored events.
+
+**What the references do (added 2026-11-02).** Cognee's verified memory sub-node implements option C today (_Recall Context_, see §7) and ships the action node as a tool for option A; Mem0 implements option A only, with one tool instance per operation. Agent Memory is better placed than Cognee for option C: extraction is server-side and automatic, so there is no promote step. Recall in `loadMessages` closes the loop on its own: turns go in through the memory slot, the server extracts facts, and the next conversation gets them back with no wiring. For option A, both references avoid "one tool does everything": the workflow author pins resource, operation and User ID per tool instance, and the model fills only the content fields (`query`, `text`, `topics`). Our tool descriptions should target two or three pinned shapes: _Search memories_, _Save memory_, and _Forget memory_.
+
+### 9.5 Where each kind of memory lives in n8n
+
+| | Short-term | Long-term |
+|---|---|---|
+| Agent Memory concept | Session memory | Memory records |
+| n8n concept | Chat memory (`ai_memory`) | None built in; the nearest is a vector store with a retriever tool |
+| Write path | Memory slot saves each turn | Server extraction from session events; _Save memory_ tool or action |
+| Read path | Memory slot loads each run | Tool (A), search before the agent (B), or opt-in injection (C) |
+| Key | `sessionId` | User ID (`ownerId`) |
+| Built-in alternatives | Simple Memory; Redis, Postgres and MongoDB Chat Memory | Vector store nodes |
+
+**Recommendation.**
+
+1. Keep the memory sub-node for short-term memory, and apply the fixes in §9.3.
+2. Ship the action node with `usableAsTool`, which covers options A and B, with _Session → Delete Event_ included: it is the supported way to trim a session (see §9.3, "Delete last N"), and _Long-Term Memory → Search / Create / Delete_ are the tool shapes for recall, "remember this" and "forget me". Document the Mem0 pattern: one tool instance per operation, User ID pinned.
+3. Ship option C as an opt-in _Recall Long-Term Memories_ setting on the memory sub-node, off by default, modelled on Cognee's _Recall Context_: a query parameter defaulting to `{{ $json.chatInput }}`, results added in `loadMessages` only. _(Revised 2026-11-02: this was "add later"; the verified reference already does it, and Agent Memory needs no promote step.)_
+
+## 10. Agent Memory vs. plain Redis in n8n workflows
 
 Plain Redis in n8n gives the agent **storage**. Agent Memory gives it a **memory system**: it decides what to keep, compacts it and makes it searchable.
 
@@ -273,13 +373,107 @@ Plain Redis in n8n gives the agent **storage**. Agent Memory gives it a **memory
 - the memory sub-node covers points 1–3 automatically;
 - the action and tool node exposes points 4–7.
 
-## 10. Recommendations and open questions
+## 11. Integration testing
+
+The goal is to test the node as users run it: installed in a real n8n, wired to an AI Agent, and talking to a real Agent Memory store. The findings come from n8n's source (`master` and tag `n8n@2.42.6`), npm, and the repos of 23 community node packages, all read on 2026-10-09.
+
+### 11.1 What n8n provides
+
+n8n publishes **no test harness** for community nodes:
+
+- **`NodeTestHarness`** (`packages/core/nodes-testing/`) runs workflow JSON in-process with `nock`. It is how n8n tests its own Agent with Simple Memory (`nodes/agents/Agent/test/integration/agent-v3.workflow.test.ts`). It is not in the `n8n-core` npm tarball, and it imports `../dist/...` paths inside the monorepo. Using it would mean copying and patching about seven files.
+- **Test containers** (`packages/quality/environments/containers/`) and the Playwright suite are private packages. The `n8n-containers` package on npm belongs to an unrelated publisher; don't use it.
+- **`@n8n/node-cli` templates have no tests**, including the memory template this repo came from.
+- **n8n's own memory nodes** have only mocked unit tests that call `supplyData` with a stub context. `MemoryRedisChat` has no tests at all.
+
+What n8n does provide is a **stock Docker image and a CLI**, and those are enough:
+
+- **Loading the node.** At boot, n8n scans `~/.n8n/nodes/node_modules` for `n8n-nodes-*` and `@*/n8n-nodes-*` packages and needs no database record. Node types are package-qualified (`@redis/n8n-nodes-agent-memory.<nodeName>`), as in a real install. Peer dependencies (`@n8n/ai-node-sdk`, `n8n-workflow`) resolve from n8n itself, as long as the mounted package has no `node_modules` of its own.
+  - `N8N_CUSTOM_EXTENSIONS` and `~/.n8n/custom` also work, and `n8n-node dev` uses them, but node types then become `CUSTOM.<nodeName>`. That differs from production.
+- **Seeding.** `n8n import:credentials` takes plain, unencrypted credential data and encrypts it with `N8N_ENCRYPTION_KEY`. `n8n import:workflow` imports workflows, and `n8n publish:workflow --id=<id>` activates them. `--activeState=fromJson` fails in regular mode: it works only in queue or multi-main mode. None of these needs an owner account or API key.
+- **Running.** `n8n execute --id=<id> --rawOutput` runs a workflow that starts with a Manual Trigger and prints the run as JSON. It exits 1 on failure. `--file` no longer works; import first. Set `N8N_LOG_LEVEL=error` so log lines don't mix with the JSON.
+- **The Chat Trigger** answers `POST /webhook/<webhookId>/chat` on an active workflow with `public: true`:
+  - `{ action: 'sendMessage', sessionId, chatInput }` runs the workflow. With `responseMode: 'lastNode'` it returns `{ output }`.
+  - `{ action: 'loadPreviousSession', sessionId }` returns the memory's `getMessages()` when `loadPreviousSession` is `memory`. This is the path that exposes the summary leak in §9.3.
+- **Owner account, if REST access is needed.** `N8N_INSTANCE_OWNER_MANAGED_BY_ENV=true` with `N8N_INSTANCE_OWNER_EMAIL` and a bcrypt `N8N_INSTANCE_OWNER_PASSWORD_HASH` creates the owner at boot. An API key then comes from `POST /rest/login` and `POST /rest/api-keys`. No environment variable seeds an API key, and the public API has no "run workflow" endpoint.
+- **A fake model.** No fake chat-model node ships. Two options exist:
+  - Point the `openAiApi` credential's `url` at a stub server that answers `/v1/chat/completions`. The stub can also record what the agent sent, which proves the history reached the model.
+  - n8n's own Playwright tests use a LangChain Code node that returns a fake model from `@langchain/core/utils/testing`. The Tools Agent needs a model with `bindTools`, so use `FakeListChatModel`, not `FakeChatModel`. This option cannot show what the model received.
+
+### 11.2 How community nodes test
+
+| Approach | Packages | What it proves |
+|---|---|---|
+| None, or lint and build only | Qdrant, Firecrawl, ElevenLabs, Tavily, Supermemory, Evolution API, Zep memory v3, Puppeteer, MemMachine | Nothing at run time |
+| Unit tests with mocked n8n context | Pinecone, Mem0, MCP, Bright Data, Browserless | Node logic |
+| Memory history class against a fake HTTP function | Cognee, Flair | Message mapping and request shape |
+| Workflow JSON fixtures, fake context, `nock` | Apify | The node in a near-n8n context, without n8n |
+| Node against the real service, without n8n | Flair, OpenClaw | The REST contract |
+| **The node inside a real n8n, in CI** | **Couchbase**, Telepilot | Loading, credentials, wiring, real behaviour |
+| Manual Docker setups only | MemMachine, Kumiho, OpenClaw, Supermemory | Nothing automated |
+
+Of 23 packages, only two run the node inside n8n automatically:
+
+- **Couchbase** (`Couchbase-Ecosystem/n8n-nodes-couchbase`) is the reference. `TESTING.md` sets out the layers: static checks, unit tests, a package contract test, end-to-end tests, and a scan of the published package.
+  - `test/e2e/docker-compose.yml` runs a pinned n8n image, Couchbase, and a local npm registry (Verdaccio) behind a proxy that poses as `registry.npmjs.org`.
+  - `run.sh` packs the build with a version that cannot exist on npm, publishes it to Verdaccio, and installs it through n8n's own community-package endpoint. This proves n8n loaded the local build, and it also tests upgrades from the last release.
+  - `run-e2e.mjs` creates credentials and workflows through `/rest/*`, then runs them with `docker compose exec n8n n8n execute --id --rawOutput` (with `N8N_RUNNERS_ENABLED=false` and a random broker port, because the server holds the default one).
+  - **Its memory test needs no model.** Manual Trigger → Chat Memory Manager (Insert) → Chat Memory Manager (Load), both connected to the Couchbase memory node. A second test writes session A and reads session B to check isolation.
+  - Agent tests use a real OpenAI key from a CI secret and skip when it is missing. `E2E_OPENAI_BASE_URL` can point elsewhere.
+  - CI (`e2e.yml`) runs on every PR and nightly against `latest` n8n, on amd64 and arm64. It collects container logs on failure.
+  - It also found a real defect: the package bundles its own `@langchain/core`, so n8n's `instanceof` checks fail. Our package avoids this by using `@n8n/ai-node-sdk` as a peer dependency.
+- **Telepilot** builds a Docker image from the n8n image, runs `npm install` on the packed package in `~/.n8n/nodes`, imports credentials and a workflow with the CLI, runs `n8n execute`, and checks the log with `grep`. It needs no REST calls and no owner account.
+
+### 11.3 Recommended setup
+
+Three layers, from fast to realistic:
+
+1. **Unit tests (vitest), no network.** Test `AgentMemoryChatHistory` and `SummaryAwareWindowedChatMemory` against a fake `request` function, as Cognee does. Cover role mapping, summary handling, skipped tool-call messages and 404 handling. Test `supplyData` with a stub `ISupplyDataFunctions`, as n8n does for its own memory nodes.
+2. **Contract tests against a real Agent Memory store, no n8n.** Run the history class against a real store, as Flair does. This catches REST changes while the API is young (§12, recommendation 3).
+3. **End-to-end tests inside n8n**, built on Couchbase's design but seeded with the CLI, as Telepilot does:
+   - **Compose:** `n8nio/n8n:2.42.6` (pinned) and an OpenAI stub. Agent Memory is not in the compose file: tests use the hosted service (§11.4).
+   - **Install:** run `npm run build`, copy `package.json` and `dist` to `nodes/node_modules/@redis/n8n-nodes-agent-memory` in a staging folder, and mount the staging `nodes` folder, writable, at `/home/node/.n8n/nodes`. A bind mount nested deeper fails: Docker creates the parent folders as root, and n8n then cannot write `~/.n8n/nodes/package.json` at startup.
+   - **Seed** in one-off containers that share the data volume, before n8n starts: `n8n import:credentials`, `n8n import:workflow`, then `n8n publish:workflow` per workflow, from fixtures committed under `test/e2e/`. A running server registers webhooks only at startup.
+   - **Settings:** `N8N_ENCRYPTION_KEY` (fixed), `N8N_UNVERIFIED_PACKAGES_ENABLED=true` (its default turns false in n8n v3), `N8N_DIAGNOSTICS_ENABLED=false`.
+   - **Tests:**
+     - Chat Memory Manager insert, then load, through our node; no model needed.
+     - Session isolation: write session A, read session B.
+     - Two Chat Trigger turns on one session. Assert that the stub's second request contains the first turn.
+     - A turn that uses a tool. Assert that no tool-call text is stored as an event (§9.3).
+     - `loadPreviousSession`. Assert that the summary is not returned (§9.3).
+     - `docker compose restart n8n`, then load again, to check persistence.
+     - Read the session directly from the Agent Memory API, to check what was actually stored.
+   - **CI:** a separate `e2e.yml` on PRs and nightly, also against `latest` n8n to catch breaking changes early. Collect `docker compose logs` on failure, and run `docker compose down -v` in an `always()` step.
+
+**Later, before verification:** add Couchbase's Verdaccio install path to test the real community-package install and upgrade flow. It costs one more container and a proxy, so it can wait.
+
+**Status (2026-10-09):** implemented as described; see [`docs/testing.md`](../docs/testing.md). One change: the Chat Memory Manager tests run through webhook-triggered workflows, not `n8n execute`, because `execute` cannot pass a per-run session ID. The tests have not yet run against the hosted service. Against a local fake of the session API, all 25 unit, 6 contract and 8 end-to-end tests pass. The Chat Trigger's "Load Previous Session" resolved `{{ $json.sessionId }}` correctly in n8n 2.42.6, even though it runs in a webhook context.
+
+### 11.4 Test environment for Agent Memory
+
+Contract and end-to-end tests run against a **hosted Agent Memory service**, not a local container. Redis runs a QA deployment for this. The test harness supplies the connection through environment variables. The names follow the SDK's `AGENT_MEMORY_API_KEY`:
+
+| Variable | Credential field | Purpose |
+|---|---|---|
+| `AGENT_MEMORY_SERVER_URL` | `serverUrl` | Base URL of the service |
+| `AGENT_MEMORY_STORE_ID` | `storeId` | Store the tests write to |
+| `AGENT_MEMORY_API_KEY` | `apiKey` | Bearer API key |
+
+**Rules:**
+
+- **Only the harness reads these variables, never the node.** Verified nodes may not read environment variables (§4, rule 6). The harness writes them into the credential fixture before `n8n import:credentials`, and passes them to contract tests as constructor options.
+- **Keep the URL and key out of the repo.** In CI they are repository secrets. Locally they come from an uncommitted `.env` file, which `.gitignore` must list.
+- **Skip without them.** If any variable is missing, the contract and end-to-end tests skip with a clear message, as Couchbase does for its OpenAI key. Pull requests from forks get no secrets, so for them only unit tests run.
+- **Isolate each run.** The store is shared across runs and developers. Each run uses a unique prefix (for example `it-<run id>-`) for session IDs and user IDs, and deletes what it created at the end: `DELETE` each session, then bulk-delete the long-term memories owned by the test users. Concurrent CI jobs then don't see each other's data.
+- **Allow for extraction lag.** Long-term memories appear asynchronously and cost model calls on the server. Tests that check extraction poll with a timeout, and there should be few of them. Most tests check session memory, which is synchronous.
+
+## 12. Recommendations and open questions
 
 **Recommendations:**
 
 1. **Package contents.** Ship two nodes plus one credential in this package:
-   - **Redis Agent Memory**, the memory sub-node (scaffolded);
-   - **Redis Agent Memory**, an action node with `usableAsTool` (to do). Resources: Long-Term Memory (Search, Create, Get, Get Many, Update, Delete, Move), Session (Get, Get Many, Delete, Add Event) and Namespace (Create, Get, Get Many, Update, Delete).
+   - **Redis Agent Chat Memory**, the memory sub-node (see §5 for the name);
+   - **Redis Agent Memory**, an action node with `usableAsTool`. Resources: Long-Term Memory (Search, Create, Get, Get Many, Update, Delete, Move), Session (Get, Get Many, Delete, Add Event, Delete Event) and Namespace (Create, Get, Get Many, Update, Delete). _Delete Event_ is the supported replacement for the Chat Memory Manager's "Delete last N" (§9.3). In tool mode the README recommends one instance per operation with User ID pinned (§9.4).
 2. **No SDK or LangChain dependencies.** Use REST through n8n's request helpers, and use `@n8n/ai-node-sdk` for the sub-node.
 3. **Pin to the REST contract**, not SDK versions. The API is young; 0.3 reworked namespaces.
 4. **Release only through `.github/workflows/publish.yml`**, which provides provenance. Prefer npm Trusted Publishing (OIDC) over an `NPM_TOKEN`.
@@ -289,11 +483,12 @@ Plain Redis in n8n gives the agent **storage**. Agent Memory gives it a **memory
 
 - Do `@n8n/ai-node-sdk`-based memory sub-nodes pass verification today? (Cognee's 0.7.0 memory node suggests yes, but this is unconfirmed.)
 - Should the "default memory" goal be pursued as a pull request to n8n core (where `memoryRedisChat` lives) instead of, or as well as, a community node?
-- Who publishes under the `@redis` npm scope, and which GitHub organisation owns the repo?
 - Session ID mode: should the node mirror n8n's built-in memory nodes ("Connected Chat Trigger Node" vs "Define below")?
-- Should the sub-node also inject relevant long-term memories (a search on the latest user input) into the context, or leave that to the tool node?
+- User ID source: with the hosted Chat Trigger there is no user identity. Should the node fall back to the session ID, or require a user ID and explain where to get one (§9.3)?
+- Does the hosted chat widget render SDK messages, whose content is an array of blocks, when it loads a previous session? This needs a test against a running n8n.
+- Long-term injection in the memory node (§9.4, option C): which defaults for result limit and similarity threshold, and how to label the injected system message?
 
-## 11. Sources
+## 13. Sources
 
 **n8n documentation:**
 
@@ -314,6 +509,20 @@ Plain Redis in n8n gives the agent **storage**. Agent Memory gives it a **memory
 - [Pinecone Assistant on n8n](https://n8n.io/integrations/pinecone-assistant/) and [the repo](https://github.com/pinecone-io/n8n-nodes-pinecone-assistant)
 - [Mem0 n8n docs](https://docs.mem0.ai/integrations/n8n)
 - [Couchbase issue #36: n8n package scan failures](https://github.com/Couchbase-Ecosystem/n8n-nodes-couchbase/issues/36)
+
+**n8n source (memory contract, §9):**
+
+- [`utils/agent-execution/memoryManagement.ts`](https://github.com/n8n-io/n8n/blob/master/packages/%40n8n/nodes-langchain/utils/agent-execution/memoryManagement.ts): the Agent's `loadMemory` and `saveToMemory`
+- [`nodes/memory/MemoryManager/MemoryManager.node.ts`](https://github.com/n8n-io/n8n/blob/master/packages/%40n8n/nodes-langchain/nodes/memory/MemoryManager/MemoryManager.node.ts): Chat Memory Manager
+- [`nodes/trigger/ChatTrigger/ChatTrigger.node.ts`](https://github.com/n8n-io/n8n/blob/master/packages/%40n8n/nodes-langchain/nodes/trigger/ChatTrigger/ChatTrigger.node.ts) and the chat widget's [`plugins/chat.ts`](https://github.com/n8n-io/n8n/blob/master/packages/frontend/%40n8n/chat/src/plugins/chat.ts): loading a previous session
+- `@n8n/ai-utilities` 0.32.4 (`adapters/langchain-memory.js`, `converters/message.js`), inspected in `node_modules`
+
+**Testing references (§11):**
+
+- [Couchbase `TESTING.md`](https://github.com/Couchbase-Ecosystem/n8n-nodes-couchbase/blob/master/TESTING.md), [`test/e2e/`](https://github.com/Couchbase-Ecosystem/n8n-nodes-couchbase/tree/master/test/e2e) and [`e2e.yml`](https://github.com/Couchbase-Ecosystem/n8n-nodes-couchbase/blob/master/.github/workflows/e2e.yml)
+- [Telepilot `publish.yml`](https://github.com/telepilotco/n8n-nodes-telepilot/blob/master/.github/workflows/publish.yml): CLI-only end-to-end run
+- [Cognee chat memory tests](https://github.com/topoteretes/cognee-integrations/blob/main/integrations/n8n/tests/chatMemory.test.ts) and [Apify workflow-fixture tests](https://github.com/apify/n8n-nodes-apify/tree/master/nodes/Apify/__tests__)
+- n8n source: [`commands/execute.ts`](https://github.com/n8n-io/n8n/blob/master/packages/cli/src/commands/execute.ts), [`nodes-testing/`](https://github.com/n8n-io/n8n/tree/master/packages/core/nodes-testing), [`scan-directory-for-packages.ts`](https://github.com/n8n-io/n8n/blob/master/packages/core/src/nodes-loader/scan-directory-for-packages.ts), [`owner.instance-settings-loader.ts`](https://github.com/n8n-io/n8n/blob/master/packages/cli/src/instance-settings-loader/loaders/owner.instance-settings-loader.ts)
 
 **AI node SDK and the Cognee reference:**
 

@@ -86,6 +86,19 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 			expect(await load(b)).toEqual([]);
 		});
 
+		it('replaces the session with Insert > Override All', async () => {
+			const session = newSession('manager-override');
+			await insert(session, 'Old question', 'Old answer');
+
+			await postJson('/webhook/e2e-memory-override', { ...session, user: 'New question', ai: 'New answer' });
+
+			expect((await load(session)).map((m) => messageText(m))).toEqual(['New question', 'New answer']);
+			expect(await storedTexts(session.sessionId)).toEqual([
+				['USER', 'New question'],
+				['ASSISTANT', 'New answer'],
+			]);
+		});
+
 		it('clears a session', async () => {
 			const session = newSession('manager-clear');
 			await insert(session, 'Forget me', 'Forgotten');

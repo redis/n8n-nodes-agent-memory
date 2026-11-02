@@ -117,4 +117,70 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 			[{ type: 'text', text: 'answer 2' }],
 		]);
 	});
+
+	describe('session ownership', () => {
+		// The node's "Verify Session Owner" option rests on these two facts.
+		it('sets the owner from the first event and accepts events from other actors', async () => {
+			const a = newSession();
+			const bActorId = `${a.actorId}-b`;
+			client.track(a.sessionId, bActorId);
+			const asB = new AgentMemoryChatHistory({
+				sessionId: a.sessionId,
+				actorId: bActorId,
+				request: client.request,
+			});
+
+			await a.history.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hello from A' }] });
+			await asB.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hello from B' }] });
+
+			const stored = await client.getSession(a.sessionId);
+			expect(stored?.ownerId).toBe(a.actorId);
+			expect(stored?.events.map((e) => e.actorId)).toEqual([a.actorId, bActorId]);
+		});
+
+		it('with Verify Session Owner, refuses another user\'s session on read and on write', async () => {
+			const a = newSession();
+			await a.history.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hello from A' }] });
+			const asB = new AgentMemoryChatHistory({
+				sessionId: a.sessionId,
+				actorId: `${a.actorId}-b`,
+				verifyOwner: true,
+				request: client.request,
+			});
+
+			await expect(asB.getMessages()).rejects.toThrow(`belongs to user "${a.actorId}"`);
+			await expect(
+				asB.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hello from B' }] }),
+			).rejects.toThrow(`belongs to user "${a.actorId}"`);
+			expect((await client.getSession(a.sessionId))?.events).toHaveLength(1);
+		});
+	});
+
+	it('recalls long-term memories created directly, scoped to the user', async () => {
+		const { history, actorId } = newSession();
+		const other = newSession();
+		const created = await client.request<{ created: string[] }>({
+			method: 'POST',
+			path: '/long-term-memory',
+			body: {
+				memories: [
+					{ id: `${actorId}-m1`, ownerId: actorId, text: 'The user is vegetarian' },
+					{ id: `${other.actorId}-m1`, ownerId: other.actorId, text: 'The user eats steak daily' },
+				],
+			},
+		});
+		expect(created?.created).toHaveLength(2);
+		const memory = new SummaryAwareWindowedChatMemory(history, {
+			windowSize: 10,
+			includeSummary: false,
+			recall: { query: 'What does the user eat?', limit: 5 },
+		});
+
+		const messages = await memory.loadMessages();
+
+		expect(messages).toHaveLength(1);
+		const [recall] = messages[0].content;
+		expect(recall.type === 'text' && recall.text).toContain('The user is vegetarian');
+		expect(recall.type === 'text' && recall.text).not.toContain('steak');
+	});
 });

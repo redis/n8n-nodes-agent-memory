@@ -6,7 +6,7 @@ Redis Agent Memory is a memory service for AI agents. It keeps the conversation 
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
 
-> **Status: early scaffold (0.1.0).** The memory sub-node is implemented. The action and tool node is planned. See [docs/research.md](docs/research.md) for background and design decisions.
+> **Status: 0.1.0, unreleased.** Both nodes are implemented: **Redis Agent Chat Memory** (memory sub-node) and **Redis Agent Memory** (action and tool node). See [docs/research.md](docs/research.md) for background and design decisions.
 
 [Installation](#installation) · [Nodes](#nodes) · [Credentials](#credentials) · [Compatibility](#compatibility) · [Usage](#usage) · [Development](#development) · [Resources](#resources)
 
@@ -16,11 +16,11 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 ## Nodes
 
-### Redis Agent Memory (memory sub-node)
+### Redis Agent Chat Memory (memory sub-node)
 
 Connects to the **Memory** input of an AI Agent.
 
-- **Loading history.** Returns the session's recent turns to the AI Agent. When enabled, they are preceded by the server-maintained summary of older turns. The Chat Trigger's "Load Previous Session" and the Chat Memory Manager get the turns without the summary.
+- **Loading history.** Returns the session's recent turns to the AI Agent. When enabled, they are preceded by the server-maintained summary of older turns and by long-term memories recalled for the current message. The Chat Trigger's "Load Previous Session" and the Chat Memory Manager get the turns only.
 - **Saving history.** Appends each user and assistant message as a session event. Tool calls and tool results are not stored. Agent Memory then extracts long-term memories from the events asynchronously.
 
 | Parameter | Description |
@@ -29,11 +29,32 @@ Connects to the **Memory** input of an AI Agent.
 | User ID | The user the conversation belongs to. Extracted long-term memories are owned by this user. |
 | Options → Context Window Length | How many past interactions are sent to the model (default 10). |
 | Options → Include Summary | Whether to prepend the summary of older turns (default on). |
-| Options → Namespace ID | Binds the session to a namespace, so extracted memories land in it. |
+| Options → Namespace ID | Binds the session to a namespace, so extracted memories land in it and recall searches only it. |
+| Options → Recall Long-Term Memories | Whether to search the user's long-term memories on every turn and give the results to the model (default off). |
+| Options → Recall Query | Text to search with. Defaults to `{{ $json.chatInput }}`, the current message. |
+| Options → Recall Limit | Max memories to recall per turn (default 5). |
+| Options → Verify Session Owner | Whether to refuse a session that the server says belongs to another user (default off). |
 
-### Redis Agent Memory (action / tool node), planned
+**Who may read a session.** Anyone who sends a session ID can read and extend that session; the node cannot tell a client from another. Authentication belongs to the trigger (Webhook with header or JWT auth, Chat Trigger with Basic or n8n user auth, Telegram or Slack sender IDs), and the workflow should take the Session ID from that authenticated context or derive it from the user. The server records the first writer as the session's owner but accepts events from any user after that. Turn on **Verify Session Owner** when every session belongs to one user: the node then fails instead of mixing two users' turns. Leave it off for shared sessions, such as group chats.
 
-Long-term memory search, create, update, delete and move; session and namespace management. Also usable as an AI Agent tool.
+**Chat Memory Manager.** *Get Many Messages* and *Insert Messages* work. *Insert Messages* with *Override All Messages* replaces the session: the summary is dropped and the new messages are extracted as new content. *Delete Messages* with *All Messages* deletes the session. *Delete Messages* with *Last N* is not supported: n8n implements it by deleting the session and re-inserting the kept turns, which drops the summary and may extract the same facts again. To trim a session, use the action node's **Session → Delete Event**; to correct or remove what was learned, use **Long-Term Memory → Search** and **Delete**.
+
+### Redis Agent Memory (action and tool node)
+
+Manages what the memory sub-node writes, and lets an AI Agent search and save memories on purpose. Each operation is one REST call on the credential's store.
+
+| Resource | Operations |
+|---|---|
+| Long-Term Memory | Search (by meaning, for one user), Get Many (by filters), Create, Get, Update, Delete, Move (to another namespace) |
+| Session | Get, Get Many, Delete, Add Event, Delete Event |
+| Namespace | Create, Get, Get Many, Update, Delete |
+
+**As an AI Agent tool.** Attach one instance per operation to the Agent's **Tool** input and pin everything but the content: set **Resource**, **Operation** and **User ID** yourself, and let the model fill **Query** (Search) or **Text** (Create) with *Let the model define this parameter*. Two instances cover most agents:
+
+- *Search memories*: Long-Term Memory → Search, User ID fixed. The agent calls it when it needs something it was told before.
+- *Save memory*: Long-Term Memory → Create, User ID fixed. The agent calls it to remember a fact right away, without waiting for extraction.
+
+Never let the model fill **User ID**: that is what keeps one user's memories away from another. Extraction is asynchronous, so a fact said in this turn may not be searchable until the next one.
 
 ## Credentials
 
@@ -53,9 +74,10 @@ The credential test calls the store health endpoint.
 ## Usage
 
 1. Add an **AI Agent** node, triggered by a **Chat Trigger**.
-2. Attach **Redis Agent Memory** to the Agent's **Memory** input.
-3. Set **User ID** to a stable identifier for the end user, for example from your auth system or an expression.
+2. Attach **Redis Agent Chat Memory** to the Agent's **Memory** input.
+3. Set **User ID** to a stable identifier for the end user, taken from the authenticated trigger (a JWT claim, a Telegram or Slack sender ID), not from the request body.
 4. Chat. Recent turns are replayed to the model, older turns are summarized, and facts about the user accumulate in long-term memory.
+5. To bring those facts back in later conversations, either turn on **Options → Recall Long-Term Memories** on the memory sub-node (every turn, no wiring), or attach the action node as a **Search memories** tool (the agent decides when to look). Both can be combined.
 
 ## Development
 

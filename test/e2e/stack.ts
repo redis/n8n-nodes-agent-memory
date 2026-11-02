@@ -14,7 +14,7 @@ import { compose, E2E_DIR, waitForN8n, WORK_DIR } from './harness';
 const ROOT = resolve(E2E_DIR, '..', '..');
 
 /** IDs of the workflows in fixtures/workflows. */
-const WORKFLOW_IDS = ['e2eMemoryManager', 'e2eChatAgent0001'];
+const WORKFLOW_IDS = ['e2eMemoryManager', 'e2eChatAgent0001', 'e2eActionNode001'];
 
 /**
  * The owner account preset by docker-compose.yml, for logging in from a

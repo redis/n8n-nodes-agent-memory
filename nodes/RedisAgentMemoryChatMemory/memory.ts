@@ -1,7 +1,13 @@
 import { BaseChatHistory, WindowedChatMemory, type Message } from '@n8n/ai-node-sdk';
+import type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
+
+export type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
 
 /** Message ID used for the synthetic message carrying the session summary. */
 export const SUMMARY_MESSAGE_ID = 'agent-memory-summary';
+
+/** Message ID used for the synthetic message carrying recalled long-term memories. */
+export const RECALL_MESSAGE_ID = 'agent-memory-recall';
 
 /**
  * Wire types for the Redis Agent Memory REST API (session memory subset).
@@ -26,18 +32,28 @@ interface AgentMemorySessionResponse {
 	summary?: { text: string; summarizedUpToEventId: string };
 }
 
-export type AgentMemoryRequest = <T>(options: {
-	method: 'GET' | 'POST' | 'DELETE';
-	path: string;
-	body?: object;
-	/** When true, a 404 resolves to `undefined` instead of throwing. */
-	allowNotFound?: boolean;
-}) => Promise<T | undefined>;
+/** A long-term memory record, as far as recall reads it. */
+export interface AgentMemoryRecord {
+	id: string;
+	text: string;
+	memoryType?: string;
+	topics?: string[];
+}
+
+interface AgentMemorySearchResponse {
+	items: AgentMemoryRecord[];
+	nextPageToken?: string;
+}
 
 export interface AgentMemoryChatHistoryOptions {
 	sessionId: string;
 	actorId: string;
 	namespaceId?: string;
+	/**
+	 * When true, reads and writes fail if the server says the session belongs
+	 * to a different user than `actorId`. Leave off for shared sessions.
+	 */
+	verifyOwner?: boolean;
 	request: AgentMemoryRequest;
 }
 
@@ -45,6 +61,21 @@ export interface AgentMemoryChatHistoryOptions {
 export interface AgentMemorySession {
 	summary?: string;
 	messages: Message[];
+}
+
+/** Thrown when `verifyOwner` is on and the session's owner is not the configured user. */
+export class SessionOwnerMismatchError extends Error {
+	constructor(
+		readonly sessionId: string,
+		readonly ownerId: string,
+		readonly actorId: string,
+	) {
+		super(
+			`Session "${sessionId}" belongs to user "${ownerId}", not to the configured User ID "${actorId}". ` +
+				'Use a session ID derived from the user, or turn off "Verify Session Owner" for shared sessions.',
+		);
+		this.name = 'SessionOwnerMismatchError';
+	}
 }
 
 const toAgentMemoryRole: Partial<Record<Message['role'], AgentMemoryRole>> = {
@@ -68,8 +99,14 @@ const fromAgentMemoryRole: Record<AgentMemoryRole, Message['role']> = {
  *   directly, and would otherwise show the summary or store it back.
  * - Writes append one session event per message. The server extracts
  *   long-term memories from these events asynchronously.
+ * - The server sets a session's `ownerId` from its first event and accepts
+ *   events from any actor after that. With `verifyOwner`, this class checks
+ *   the owner itself, on the first read or write of each instance.
  */
 export class AgentMemoryChatHistory extends BaseChatHistory {
+	/** True once the owner check passed, or the session was found not to exist. */
+	private ownerChecked = false;
+
 	constructor(private readonly options: AgentMemoryChatHistoryOptions) {
 		super();
 	}
@@ -84,7 +121,11 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 			path: this.sessionPath,
 			allowNotFound: true,
 		});
-		if (!session) return { messages: [] };
+		if (!session) {
+			this.ownerChecked = true;
+			return { messages: [] };
+		}
+		this.assertOwner(session);
 
 		const messages: Message[] = [];
 		for (const event of session.events ?? []) {
@@ -100,8 +141,38 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 		return { summary: session.summary?.text || undefined, messages };
 	}
 
+	private assertOwner(session: AgentMemorySessionResponse): void {
+		const { verifyOwner, sessionId, actorId } = this.options;
+		if (verifyOwner && session.ownerId && session.ownerId !== actorId) {
+			throw new SessionOwnerMismatchError(sessionId, session.ownerId, actorId);
+		}
+		this.ownerChecked = true;
+	}
+
 	async getMessages(): Promise<Message[]> {
 		return (await this.getSession()).messages;
+	}
+
+	/**
+	 * Semantic search over the user's long-term memories, scoped to the
+	 * configured user and, when set, the namespace.
+	 */
+	async searchLongTermMemories(query: string, limit: number): Promise<AgentMemoryRecord[]> {
+		const response = await this.options.request<AgentMemorySearchResponse>({
+			method: 'POST',
+			path: '/long-term-memory/search',
+			body: {
+				text: query,
+				limit,
+				filter: {
+					ownerId: { eq: this.options.actorId },
+					...(this.options.namespaceId
+						? { namespaceRef: { eq: this.options.namespaceId } }
+						: {}),
+				},
+			},
+		});
+		return response?.items ?? [];
 	}
 
 	async addMessage(message: Message): Promise<void> {
@@ -122,6 +193,10 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 			.map((part) => ({ text: part.text }))
 			.filter((part) => part.text.length > 0);
 		if (content.length === 0) return;
+
+		// A write-only path (the Memory Manager's Insert) has not read the
+		// session yet, so the owner check needs one read first.
+		if (this.options.verifyOwner && !this.ownerChecked) await this.getSession();
 
 		await this.options.request({
 			method: 'POST',
@@ -151,20 +226,23 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 export interface SummaryAwareWindowedChatMemoryOptions {
 	windowSize: number;
 	includeSummary: boolean;
+	/** When set, each load also searches long-term memory and prepends the results. */
+	recall?: { query: string; limit: number };
 }
 
 /**
  * Windowed memory that puts the session summary in front of the recent turns.
  *
  * The AI Agent reads history through `loadMessages()`, so only the model sees
- * the summary. `WindowedChatMemory` alone keeps the last `windowSize * 2`
- * messages; this variant windows the turns, then adds the summary as a
- * leading user message.
+ * the summary and the recalled long-term memories. `WindowedChatMemory` alone
+ * keeps the last `windowSize * 2` messages; this variant windows the turns,
+ * then adds the recalled memories and the summary as leading user messages.
  *
  * The Agent's prompt starts with its own system message, so history lands
  * after it. Some chat models (Anthropic, Gemini) reject a system message in
- * any other position, so the history this returns has none: the summary and
- * stored SYSTEM events reach the model as user messages.
+ * any other position, so the history this returns has none: the recalled
+ * memories, the summary and stored SYSTEM events reach the model as user
+ * messages.
  */
 export class SummaryAwareWindowedChatMemory extends WindowedChatMemory {
 	constructor(
@@ -175,19 +253,42 @@ export class SummaryAwareWindowedChatMemory extends WindowedChatMemory {
 	}
 
 	async loadMessages(): Promise<Message[]> {
-		const { summary, messages } = await this.agentMemoryHistory.getSession();
-		const windowed = messages
-			.slice(-this.memoryOptions.windowSize * 2)
-			.map((message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message));
-		if (!this.memoryOptions.includeSummary || !summary) return windowed;
+		const { recall, includeSummary, windowSize } = this.memoryOptions;
+		const query = recall?.query.trim();
+		const [{ summary, messages }, recalled] = await Promise.all([
+			this.agentMemoryHistory.getSession(),
+			recall && query
+				? this.agentMemoryHistory.searchLongTermMemories(query, recall.limit)
+				: Promise.resolve([]),
+		]);
 
-		return [
-			{
+		const windowed = messages
+			.slice(-windowSize * 2)
+			.map((message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message));
+
+		const leading: Message[] = [];
+		if (recalled.length > 0) {
+			leading.push({
+				id: RECALL_MESSAGE_ID,
+				role: 'user',
+				content: [
+					{
+						type: 'text',
+						text: `Long-term memories about the user, from earlier conversations:\n${recalled
+							.map((record) => `- ${record.text}`)
+							.join('\n')}`,
+					},
+				],
+			});
+		}
+		if (includeSummary && summary) {
+			leading.push({
 				id: SUMMARY_MESSAGE_ID,
 				role: 'user',
 				content: [{ type: 'text', text: `Summary of the earlier conversation:\n${summary}` }],
-			},
-			...windowed,
-		];
+			});
+		}
+
+		return [...leading, ...windowed];
 	}
 }

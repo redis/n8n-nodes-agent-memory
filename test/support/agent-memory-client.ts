@@ -21,6 +21,7 @@ export interface StoredSessionEvent {
 
 export interface StoredSession {
 	sessionId: string;
+	ownerId: string;
 	events: StoredSessionEvent[];
 	summary?: { text: string };
 }

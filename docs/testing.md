@@ -2,12 +2,12 @@
 
 The tests come in three layers, from fast to realistic. The background and the
 survey of how other community nodes test are in
-[`specs/research.md`](../specs/research.md), §11.
+[`research.md`](research.md), §11.
 
 | Layer | Command | Needs | What it checks |
 |---|---|---|---|
-| Unit | `npm test` | Nothing | The chat history and memory classes, and `supplyData`, against fake HTTP |
-| Contract | `npm run test:contract` | Agent Memory | The chat history class against the real REST API, without n8n |
+| Unit | `npm test` | Nothing | The chat history and memory classes, `supplyData`, and the action node's `execute`, against fake HTTP |
+| Contract | `npm run test:contract` | Agent Memory | The chat history class and the action node against the real REST API, without n8n |
 | End-to-end | `npm run test:e2e` | Agent Memory, Docker | The built package inside a real n8n, driven through webhooks |
 | Manual | `npm run e2e:up` / `npm run e2e:down` | Docker | The same n8n, kept running for you to use in a browser |
 
