@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { IHttpRequestOptions, INode, ISupplyDataFunctions } from 'n8n-workflow';
 import { RedisAgentMemoryChatMemory } from '../../nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node';
+import { NOT_FOUND_ERROR_TYPE } from '../../nodes/shared/agentMemoryRequest';
 
 /** A LangChain message, as far as these tests read it. */
 interface BaseMessage {
@@ -30,16 +31,30 @@ const NODE: INode = {
 	parameters: {},
 };
 
-function httpError(status: number) {
+/** An HTTP failure as n8n's request helper surfaces it; `data` is the parsed body. */
+function httpError(status: number, data?: unknown) {
 	return Object.assign(new Error(`Request failed with status code ${status}`), {
 		httpCode: String(status),
-		response: { status },
+		response: { status, data },
 	});
 }
 
+/** The body the API returns for a missing session (verified against the service). */
+const SESSION_NOT_FOUND = {
+	type: NOT_FOUND_ERROR_TYPE,
+	title: 'Session Not Found',
+	status: 404,
+	detail: 'The requested session was not found',
+};
+
 function context({ parameters = {}, credentials = {}, respond = () => ({}) }: Setup) {
 	const requests: Array<{ credentialType: string; options: IHttpRequestOptions }> = [];
-	const params: Record<string, unknown> = { sessionId: 's-1', actorId: 'user-1', options: {}, ...parameters };
+	const params: Record<string, unknown> = {
+		sessionId: 's-1',
+		actorId: 'user-1',
+		options: {},
+		...parameters,
+	};
 
 	const ctx = {
 		getNode: () => NODE,
@@ -117,13 +132,31 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 	it('treats an unknown session as empty', async () => {
 		const { memory } = await supply({
 			respond: () => {
-				throw httpError(404);
+				throw httpError(404, SESSION_NOT_FOUND);
 			},
 		});
 
 		const { chat_history } = await memory.loadMemoryVariables({});
 
 		expect(chat_history).toEqual([]);
+	});
+
+	it('fails the run for a 404 that is not the API not-found, such as a wrong URL', async () => {
+		const { memory } = await supply({
+			respond: () => {
+				throw httpError(404, '404 page not found');
+			},
+		});
+
+		// supplyMemory rethrows the adapter's NodeApiError as a NodeOperationError
+		// with the same message (from the SDK's own copy of n8n-workflow, so the
+		// class is matched by name); the adapter's tests pin the status code.
+		const call = memory.loadMemoryVariables({});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: 'The resource you are requesting could not be found',
+		});
 	});
 
 	it('fails the run for other API errors', async () => {

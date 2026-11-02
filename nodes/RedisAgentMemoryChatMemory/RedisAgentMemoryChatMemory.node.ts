@@ -14,6 +14,14 @@ type MemoryOptions = {
 	recallLimit?: number;
 };
 
+/**
+ * Default Context Window Length, in interactions. Generous on purpose: the
+ * server already trims the session and folds older turns into the summary,
+ * so a small window here would hide turns that the summary does not cover
+ * yet. See docs/research.md §9.3.
+ */
+const DEFAULT_WINDOW_SIZE = 50;
+
 export class RedisAgentMemoryChatMemory implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Redis Agent Chat Memory',
@@ -84,11 +92,12 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 						displayName: 'Context Window Length',
 						name: 'windowSize',
 						type: 'number',
-						default: 10,
-						description: 'How many past interactions the model receives as context',
+						default: DEFAULT_WINDOW_SIZE,
+						description:
+							'How many past interactions the model receives as context. The server already trims the session and folds older turns into the summary, so keep this at least as high as the number of turns the server retains. A turn outside the window that the summary does not cover yet is not sent to the model at all.',
 						typeOptions: {
 							minValue: 1,
-							maxValue: 100,
+							maxValue: 500,
 						},
 					},
 					{
@@ -180,7 +189,7 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 		});
 
 		const memory = new SummaryAwareWindowedChatMemory(history, {
-			windowSize: options.windowSize ?? 10,
+			windowSize: options.windowSize ?? DEFAULT_WINDOW_SIZE,
 			includeSummary: options.includeSummary ?? true,
 			recall: options.recallLongTermMemories
 				? {

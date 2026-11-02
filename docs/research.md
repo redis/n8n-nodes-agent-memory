@@ -78,10 +78,32 @@ The SDK's operations map to these REST endpoints:
 - **Session events.** Each event has `eventId`, `actorId`, `sessionId` and `role` (`USER` / `ASSISTANT` / `SYSTEM`). Its `content` is an array of `{ text }` parts, plus `createdAt` and optional `metadata`.
 - **Session memory response.** Returns the retained `events` plus an optional **`summary`**: a compacted summary of older turns maintained by a background summarization job (`summarizedUpToEventId`, `summarizedEvents`).
 - **Memory records.** Fields are `id`, `text`, `memoryType`, `sessionId`, `ownerId`, `namespaceRef`, `topics`, typed `attributes` (for custom memory types), `createdAt` and `updatedAt`.
+- **Errors.** Every error is an RFC 9457 Problem Details body. The shapes, as verified against the hosted service, are in §2.1.
 - **Search.** Semantic search over long-term memory with:
   - `similarityThreshold` (0–1) and `limit` (1–100);
   - filters on owner, session, namespace, topics, memory type and creation date, combined with an and/or `filterOp`;
   - paging via `pageToken`.
+
+### 2.1 Error responses
+
+Verified on 2026-11-02 against the docs' OpenAPI spec, the SDK (0.3.1 and 1.0.0-beta.1, `dist/esm/models/errors`), the docs' demo script (`redis/docs`, `static/js/agent-memory-demo.js`) and the hosted service, one request per case.
+
+**Shape.** Every API error is an RFC 9457 Problem Details body: `type` (a problem URI such as `/errors/resource-not-found`), `title`, `status`, `detail`, and for 400s a `fields` array. The spec and both SDK versions define one 404 schema, `NotFoundErrorResponseContent`, whose `type` has the single value `/errors/resource-not-found`; the SDK matches 404 by status alone. The resource is named only in `title`. The 1.0.0-beta.1 SDK adds `gateway-not-found` and `upstream-not-found`, for other resources. The docs' quickstart, developer guide and overview say nothing about errors.
+
+| Request | Answer |
+|---|---|
+| `GET …/session-memory/{missing}` | `404`, JSON: `{"type":"/errors/resource-not-found","title":"Session Not Found","status":404,"detail":"The requested session was not found"}` |
+| `DELETE …/session-memory/{missing}` | `204`, no body |
+| `GET …/long-term-memory/{missing}` | `404`, same shape, `title: "Memory Not Found"` |
+| `GET …/namespaces/{missing}` | `404`, same shape, `title: "Namespace Not Found"` |
+| Wrong Store ID, malformed or well-formed 32-hex, on `/health` or a session path | `403`, `text/html` nginx page; the request never reaches the API, so the key seems bound to its store |
+| Server URL with an extra path segment (`/v1/v1/stores/…`) | `403`, `text/html` nginx page |
+| Unknown path under a valid store | `404`, `text/plain` "404 page not found" |
+| Event ID shorter than 32 characters, on an existing or a missing session | `400`, `/errors/invalid-data`, "EventID: the length must be exactly 32." |
+
+**How n8n presents them.** `httpRequestWithAuthentication` wraps the axios error in a `NodeApiError` itself. That constructor keeps the parsed JSON body in `error.context.data`, takes `description` from the first of its known keys (`detail` comes before `title`), and sets `message` from the status code. A missing session therefore reads "The resource you are requesting could not be found" with the description "The requested session was not found". A text or HTML body leaves `context.data` unset; the nginx 403 reads "Forbidden - perhaps check your credentials?", which is apt, since the Store ID is part of the credential. Constructing a `NodeApiError` from a `NodeApiError` returns the original unchanged, so options such as `itemIndex` passed at that point are dropped.
+
+**What the node does with this.** The shared request adapter (`nodes/shared/agentMemoryRequest.ts`) treats a 404 as "does not exist" only when `context.data.type` is `/errors/resource-not-found`; any other 404 fails the run. It sets `context.itemIndex` by hand on errors n8n has already wrapped. The chat history's `clear()` keeps the same tolerance, although the live `DELETE` of a missing session is a 204 and never needs it. A contract test pins the `GET` body and the `204`.
 
 ## 3. Why a community node, given the HTTP Request node exists
 
@@ -302,7 +324,7 @@ This is what the scaffolded `RedisAgentMemoryChatMemory` node does. It also fill
 - **The summary leaks into the chat widget.** The node adds the summary in `getMessages`, so the Chat Trigger returns it when the widget loads a previous session. The widget labels every message that isn't a `HumanMessage` as `bot`, so the summary appears as a bot reply, and the SDK cannot hide it (point 5). The widget also reads `kwargs.content` as text, but SDK messages carry an array of content blocks; rendering in the hosted chat needs a test. **Fix:** add the summary in `loadMessages` (the memory class), not in `getMessages` (the history class). Point 6 means the model still gets it and the widget does not.
 - **Chat Memory Manager's "Delete last N" rebuilds the session.** It reads all messages, calls `clear()`, then re-adds the rest one at a time. On Agent Memory that deletes the server summary, posts the summary back as a `SYSTEM` event, gives every event a new ID and timestamp, and may trigger extraction again, which risks duplicate long-term memories. "Insert" with "Override All" also calls `clear()`. **Fix:** the change above keeps the summary out of the re-added messages. Document "Delete last N" as unsupported; the action node's per-event delete is the safe alternative. _(2026-11-02: "Insert > Override All" is a delete and repost by design, so losing the summary and extracting from the new events is the intended result; only "Delete last N" misbehaves. Cognee's sub-node makes `clear()` throw, which blocks both operations; we cannot copy that because our `clear()` is the real "Delete > All", and the SDK's `ChatHistory` interface, with only `getMessages`, `addMessage(s)` and `clear`, gives the node no way to tell a rebuild from a delete followed by an insert. The README's "Chat Memory Manager" note records the outcome.)_
 - **Tool-call messages become extra assistant events.** When tools ran, the AI messages that carry tool calls arrive through `addMessages` with role `assistant`. The node drops tool results but would store any text in those messages, including n8n's synthetic "Calling X with input: …". **Fix:** skip assistant messages that contain tool-call blocks. (Done. On n8n 2.42.6, the end-to-end tests show this message arriving with no text, so nothing extra was stored there; the filter guards the synthetic-message case and other versions.)
-- **History is windowed three times.** The server keeps recent events and summarizes the rest, the node applies Context Window Length, and the Agent may trim by tokens. **Fix:** treat the server as the main control. Keep a generous default window and say in the parameter description that older turns live in the summary.
+- **History is windowed three times.** The server keeps recent events and summarizes the rest, the node applies Context Window Length, and the Agent may trim by tokens. **Fix:** treat the server as the main control. Keep a generous default window and say in the parameter description that older turns live in the summary. _(2026-11-02: done. The default is 50 interactions and the maximum 500. The parameter description and the README say that the server trims the session first, that the summary covers only the turns the server has dropped, and that the window should not be lower than the number of turns the server retains, or a turn can fall between the two.)_
 - **The session ID is not a user ID.** The Chat Trigger supplies a `sessionId`, which the hosted widget keeps per browser in `localStorage`, but no user identity. Long-term memory is keyed by user, so cross-session recall needs a stable user ID: from the embedded chat's `metadata`, or a Telegram or Slack user ID. If a workflow passes the session ID as the user ID, long-term memory still works, but only within that session.
 
 ### 9.4 Long-term memory does not fit the memory slot

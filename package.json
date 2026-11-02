@@ -27,6 +27,8 @@
 		"dev": "n8n-node dev",
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
+		"format": "prettier --write \"**/*.{ts,js,mjs,cjs}\"",
+		"format:check": "prettier --check \"**/*.{ts,js,mjs,cjs}\"",
 		"typecheck": "tsc -p tsconfig.test.json",
 		"test": "vitest run --project unit",
 		"test:watch": "vitest --project unit",

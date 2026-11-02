@@ -203,7 +203,12 @@ describe('AgentMemoryChatHistory', () => {
 				role: 'assistant',
 				content: [
 					{ type: 'text', text: 'Calling calculator with input: {"input":"2+2"}' },
-					{ type: 'tool-call', toolCallId: 'call-1', toolName: 'calculator', input: '{"input":"2+2"}' },
+					{
+						type: 'tool-call',
+						toolCallId: 'call-1',
+						toolName: 'calculator',
+						input: '{"input":"2+2"}',
+					},
 				],
 			});
 
@@ -396,7 +401,7 @@ describe('SummaryAwareWindowedChatMemory with recall', () => {
 		},
 	};
 
-	it('searches the user\'s memories with the query and puts them before the summary', async () => {
+	it("searches the user's memories with the query and puts them before the summary", async () => {
 		const { request, calls } = fakeRequest({ ...session, ...found });
 		const memory = new SummaryAwareWindowedChatMemory(history(request, 'ns-1'), {
 			windowSize: 10,

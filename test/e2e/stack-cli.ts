@@ -32,7 +32,9 @@ Stop with: npm run e2e:down`);
 		}
 		case 'down':
 			stopStack();
-			console.log('Stopped the stack and deleted its data. Logs: test/e2e/.work/docker-compose.log');
+			console.log(
+				'Stopped the stack and deleted its data. Logs: test/e2e/.work/docker-compose.log',
+			);
 			return;
 		default:
 			console.error('Usage: tsx test/e2e/stack-cli.ts <up|down>');

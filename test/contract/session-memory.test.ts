@@ -3,6 +3,7 @@ import {
 	AgentMemoryChatHistory,
 	SummaryAwareWindowedChatMemory,
 } from '../../nodes/RedisAgentMemoryChatMemory/memory';
+import { NOT_FOUND_ERROR_TYPE } from '../../nodes/shared/agentMemoryRequest';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
 import { agentMemoryConfig, runPrefix, skipReason } from '../support/env';
 
@@ -63,7 +64,12 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 				role: 'assistant',
 				content: [
 					{ type: 'text', text: 'Calling calculator with input: {"input":"2+2"}' },
-					{ type: 'tool-call', toolCallId: 'call-1', toolName: 'calculator', input: '{"input":"2+2"}' },
+					{
+						type: 'tool-call',
+						toolCallId: 'call-1',
+						toolName: 'calculator',
+						input: '{"input":"2+2"}',
+					},
 				],
 			},
 			{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-1', result: '4' }] },
@@ -94,6 +100,33 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 		await history.clear();
 
 		expect(await history.getMessages()).toEqual([]);
+	});
+
+	it("answers a missing session with the API's not-found body, the one the node swallows", async () => {
+		const { sessionId } = newSession();
+
+		const { status, body } = await client.probe(
+			'GET',
+			`/session-memory/${encodeURIComponent(sessionId)}`,
+		);
+
+		expect(status).toBe(404);
+		expect(JSON.parse(body)).toMatchObject({
+			type: NOT_FOUND_ERROR_TYPE,
+			title: 'Session Not Found',
+			status: 404,
+		});
+	});
+
+	it('deletes a missing session with 204, not 404', async () => {
+		const { sessionId } = newSession();
+
+		const { status } = await client.probe(
+			'DELETE',
+			`/session-memory/${encodeURIComponent(sessionId)}`,
+		);
+
+		expect(status).toBe(204);
 	});
 
 	it('windows the turns the model receives', async () => {
@@ -130,7 +163,10 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 				request: client.request,
 			});
 
-			await a.history.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hello from A' }] });
+			await a.history.addMessage({
+				role: 'user',
+				content: [{ type: 'text', text: 'Hello from A' }],
+			});
 			await asB.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hello from B' }] });
 
 			const stored = await client.getSession(a.sessionId);
@@ -138,9 +174,12 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 			expect(stored?.events.map((e) => e.actorId)).toEqual([a.actorId, bActorId]);
 		});
 
-		it('with Verify Session Owner, refuses another user\'s session on read and on write', async () => {
+		it("with Verify Session Owner, refuses another user's session on read and on write", async () => {
 			const a = newSession();
-			await a.history.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hello from A' }] });
+			await a.history.addMessage({
+				role: 'user',
+				content: [{ type: 'text', text: 'Hello from A' }],
+			});
 			const asB = new AgentMemoryChatHistory({
 				sessionId: a.sessionId,
 				actorId: `${a.actorId}-b`,

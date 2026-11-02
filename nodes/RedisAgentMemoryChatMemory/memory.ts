@@ -166,9 +166,7 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 				limit,
 				filter: {
 					ownerId: { eq: this.options.actorId },
-					...(this.options.namespaceId
-						? { namespaceRef: { eq: this.options.namespaceId } }
-						: {}),
+					...(this.options.namespaceId ? { namespaceRef: { eq: this.options.namespaceId } } : {}),
 				},
 			},
 		});
@@ -238,6 +236,11 @@ export interface SummaryAwareWindowedChatMemoryOptions {
  * keeps the last `windowSize * 2` messages; this variant windows the turns,
  * then adds the recalled memories and the summary as leading user messages.
  *
+ * The window is applied to the turns the server retains, which are the ones
+ * the summary does not cover yet. A window smaller than the server's
+ * retention therefore drops turns that are in neither; the node's default is
+ * generous for that reason.
+ *
  * The Agent's prompt starts with its own system message, so history lands
  * after it. Some chat models (Anthropic, Gemini) reject a system message in
  * any other position, so the history this returns has none: the recalled
@@ -264,7 +267,9 @@ export class SummaryAwareWindowedChatMemory extends WindowedChatMemory {
 
 		const windowed = messages
 			.slice(-windowSize * 2)
-			.map((message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message));
+			.map(
+				(message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message),
+			);
 
 		const leading: Message[] = [];
 		if (recalled.length > 0) {

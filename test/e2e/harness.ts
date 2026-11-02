@@ -37,7 +37,9 @@ export async function waitForN8n(timeoutMs = 180_000): Promise<void> {
 			const ready = await fetch(`${N8N_URL}/healthz/readiness`);
 			if (ready.ok) {
 				// An unknown action is answered by the trigger once its webhook is live.
-				const probe = await fetch(`${N8N_URL}/webhook/${CHAT_WEBHOOK_ID}/chat`, { method: 'OPTIONS' });
+				const probe = await fetch(`${N8N_URL}/webhook/${CHAT_WEBHOOK_ID}/chat`, {
+					method: 'OPTIONS',
+				});
 				if (probe.status !== 404) return;
 				lastState = 'ready, but the chat webhook is not registered yet';
 			} else {
@@ -91,10 +93,13 @@ export async function sendChatMessage(sessionId: string, chatInput: string): Pro
 }
 
 export async function loadPreviousSession(sessionId: string): Promise<SerializedMessage[]> {
-	const { data } = await postJson<{ data: SerializedMessage[] }>(`/webhook/${CHAT_WEBHOOK_ID}/chat`, {
-		action: 'loadPreviousSession',
-		sessionId,
-	});
+	const { data } = await postJson<{ data: SerializedMessage[] }>(
+		`/webhook/${CHAT_WEBHOOK_ID}/chat`,
+		{
+			action: 'loadPreviousSession',
+			sessionId,
+		},
+	);
 	return data;
 }
 

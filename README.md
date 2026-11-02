@@ -27,7 +27,7 @@ Connects to the **Memory** input of an AI Agent.
 |---|---|
 | Session ID | Conversation identifier. Defaults to `{{ $json.sessionId }}` from the Chat Trigger. |
 | User ID | The user the conversation belongs to. Extracted long-term memories are owned by this user. |
-| Options → Context Window Length | How many past interactions are sent to the model (default 10). |
+| Options → Context Window Length | How many past interactions are sent to the model (default 50, max 500). Keep it at least as high as the number of turns the server retains; see below. |
 | Options → Include Summary | Whether to prepend the summary of older turns (default on). |
 | Options → Namespace ID | Binds the session to a namespace, so extracted memories land in it and recall searches only it. |
 | Options → Recall Long-Term Memories | Whether to search the user's long-term memories on every turn and give the results to the model (default off). |
@@ -36,6 +36,8 @@ Connects to the **Memory** input of an AI Agent.
 | Options → Verify Session Owner | Whether to refuse a session that the server says belongs to another user (default off). |
 
 **Who may read a session.** Anyone who sends a session ID can read and extend that session; the node cannot tell a client from another. Authentication belongs to the trigger (Webhook with header or JWT auth, Chat Trigger with Basic or n8n user auth, Telegram or Slack sender IDs), and the workflow should take the Session ID from that authenticated context or derive it from the user. The server records the first writer as the session's owner but accepts events from any user after that. Turn on **Verify Session Owner** when every session belongs to one user: the node then fails instead of mixing two users' turns. Leave it off for shared sessions, such as group chats.
+
+**Context window.** The history is trimmed in up to three places. The server keeps the recent turns of a session and folds older ones into the summary. The node then sends the model the last **Context Window Length** turns of what the server kept, preceded by the summary. The AI Agent may trim once more, by tokens, if you set its *Max Tokens From Memory*. The server is the main control: a turn it has retained but the summary does not cover yet is sent only if it falls inside the node's window. So keep **Context Window Length** at least as high as the number of turns your store retains before summarizing. The default of 50 is chosen for that; lower it only if your store retains fewer turns.
 
 **Chat Memory Manager.** *Get Many Messages* and *Insert Messages* work. *Insert Messages* with *Override All Messages* replaces the session: the summary is dropped and the new messages are extracted as new content. *Delete Messages* with *All Messages* deletes the session. *Delete Messages* with *Last N* is not supported: n8n implements it by deleting the session and re-inserting the kept turns, which drops the summary and may extract the same facts again. To trim a session, use the action node's **Session → Delete Event**; to correct or remove what was learned, use **Long-Term Memory → Search** and **Delete**.
 
@@ -85,6 +87,7 @@ The credential test calls the store health endpoint.
 npm install
 npm run dev        # builds and starts n8n with this node at http://localhost:5678
 npm run lint       # n8n community-node lint rules (must pass for verification)
+npm run format     # prettier over the TypeScript and JavaScript sources; CI checks this
 npm run build
 npm test           # unit tests, no network
 npm run e2e:up     # n8n in Docker with this package, for manual testing at http://127.0.0.1:15678

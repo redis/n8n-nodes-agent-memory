@@ -8,13 +8,25 @@ import { NodeApiError } from 'n8n-workflow';
 
 export const AGENT_MEMORY_CREDENTIAL = 'redisAgentMemoryApi';
 
+/**
+ * Problem type the API puts in every not-found body (`{ type, title, status,
+ * detail }`). It is the same for a missing session, memory or namespace; only
+ * `title` names the resource. A wrong store or URL never produces it: the
+ * gateway answers those with a 403, and an unknown path with a plain-text 404.
+ */
+export const NOT_FOUND_ERROR_TYPE = '/errors/resource-not-found';
+
 export interface AgentMemoryRequestOptions {
 	method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
 	/** Path below `/v1/stores/{storeId}`, starting with a slash. */
 	path: string;
 	body?: object;
 	qs?: Record<string, string | number | boolean>;
-	/** When true, a 404 resolves to `undefined` instead of throwing. */
+	/**
+	 * When true, the API's own not-found answer (a 404 whose body has
+	 * `type: '/errors/resource-not-found'`) resolves to `undefined`. Any other
+	 * 404, such as a plain-text one from a proxy, still throws.
+	 */
 	allowNotFound?: boolean;
 }
 
@@ -51,9 +63,25 @@ export async function createAgentMemoryRequest(
 				},
 			);
 		} catch (error) {
+			// n8n's helper has usually wrapped the error already; NodeApiError then
+			// returns that instance as is, so the item index must be set by hand.
 			const apiError = new NodeApiError(context.getNode(), error as JsonObject, { itemIndex });
-			if (allowNotFound && String(apiError.httpCode) === '404') return undefined;
+			apiError.context.itemIndex ??= itemIndex;
+			if (allowNotFound && isResourceNotFound(apiError)) return undefined;
 			throw apiError;
 		}
 	};
+}
+
+/** True for a 404 whose body is the API's Problem Details not-found. */
+function isResourceNotFound(error: NodeApiError): boolean {
+	if (String(error.httpCode) !== '404') return false;
+	// NodeApiError keeps the parsed JSON body in `context.data`; a non-JSON
+	// body (text or HTML) leaves it unset.
+	const body = error.context.data;
+	return (
+		typeof body === 'object' &&
+		body !== null &&
+		(body as { type?: unknown }).type === NOT_FOUND_ERROR_TYPE
+	);
 }

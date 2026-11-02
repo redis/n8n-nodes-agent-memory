@@ -72,10 +72,16 @@ The workflows are in `test/e2e/fixtures/workflows/`:
   Trigger, for "Load Previous Session".
 
 The tests in [`test/e2e/memory.test.ts`](../test/e2e/memory.test.ts) cover
-insert and load, separate sessions, clearing, a second turn that sees the
-first, a turn with a tool call, loading a previous session without the
-summary, and history that survives an n8n restart. They also read the stored
-events straight from the Agent Memory API.
+insert and load, separate sessions, clearing, Insert with Override All, a
+second turn that sees the first, a turn with a tool call, loading a previous
+session without the summary, and history that survives an n8n restart. They
+also read the stored events straight from the Agent Memory API.
+
+Each test seeds its own session: the read-only ones write their turns through
+the insert webhook first. So any test can run alone, for example
+`npx vitest run --project e2e -t "tool runs"`, and a failure points at the test
+that owns the data. The restart test is its own `describe` at the end of the
+file, since it restarts the container.
 
 ## Manual testing in a browser
 

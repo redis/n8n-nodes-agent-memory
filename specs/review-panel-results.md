@@ -7,6 +7,9 @@
 - **Status (2026-10-29):** The 3 blockers and D2 are fixed and have been removed from this file. Item numbers are kept as in the original run. Line numbers refer to commit 52b79b9 and may have shifted since.
 - **Decisions (2026-10-30):** Each remaining decision-relevant finding ends with the options considered and a recommendation.
 - **Status (2026-11-02):** D1, D3, D7 and D14 are addressed and removed. D1: a probe showed the server sets `ownerId` from the first event and accepts events from any actor, so the node gained an opt-in "Verify Session Owner" option (off by default, to behave like the other memory nodes) and the README explains that the trigger authenticates callers. D3/D7: the README documents the Chat Memory Manager modes, "Insert > Override All" has an e2e test, and the new action node offers *Session → Delete Event* as the supported way to trim a session. D14: `docs/research.md` is the one research document; `specs/research.md` is gone. Background and the revised recommendations are in `docs/research.md` §7, §9.3, §9.4 and §12.
+- **Status (2026-11-02, later):** D4 and D6 (one root cause) are addressed with option 1 and removed. The Context Window Length default is 50 (was 10), the maximum 500 (was 100), the parameter description says that the server trims the session first and that the window must not be lower than the server's retention, and the README has a "Context window" paragraph with the same advice. `docs/research.md` §9.3 records the change.
+- **Status (2026-11-02, D5):** Verified against the spec, both SDK versions and the live store, then addressed with option 1 and removed. A wrong Store ID or URL prefix is a 403 from the gateway, not a 404, so the silent-empty-history case never happened on the hosted service; the adapter now swallows a 404 only when the body is the API's `resource-not-found`, rethrows every other 404, and keeps the item index on errors n8n already wrapped. Unit tests cover the adapter; contract tests pin the live `GET` body and the `204` on `DELETE`. The evidence is in `docs/research.md` §2.1.
+- **Status (2026-11-02, D8):** Addressed with option 1 and removed. Every e2e test seeds its own session; the read-only tests write their turns through the Memory Manager insert webhook, with the user ID the chat workflow derives (`user-<sessionId>`). The two chat-turn tests are one two-turn test, and the restart test is its own `describe` at the end of the file. `docs/testing.md` explains how to run one test alone.
 
 ## Notes on this run
 
@@ -16,72 +19,6 @@
 - Findings were grouped by the first 50 characters of each claim, so findings with the same root cause may appear more than once (for example D3 and D7, D4 and D6, D13 and P4).
 
 ## Decision-relevant findings
-
-### D4. The node always cuts history to the last `windowSize * 2` events (default 20). Retained events that fall outside that window but are not yet in the server summary reach neither the model nor the summary. The parameter description does not warn about this, against the design decision recorded in the research notes.
-
-**Locations:** `nodes/RedisAgentMemoryChatMemory/memory.ts:174; RedisAgentMemoryChatMemory.node.ts:88-97`
-
-**Evidence:**
-
-specs/research.md:79 says the response holds the *retained* events plus a summary of *older* turns. specs/research.md:304 says 'treat the server as the main control. Keep a generous default window and say in the parameter description that older turns live in the summary.' The implementation keeps the template default of 10, and the description reads only 'How many past interactions the model receives as context'. README.md:89 says 'Recent turns are replayed to the model, older turns are summarized', which implies no gap between the two.
-
-**Anchors:** `const windowed = messages.slice(-this.memoryOptions.windowSize * 2);`
-
-**Options:**
-
-1. **Generous default and an honest description.** Raise the Context Window Length default from 10 to 50, raise the maximum, and change the description to say the server already trims the session and that turns outside the window are only in the summary. In the README, advise setting it at least as high as the number of events the store retains before summarizing, so no turn falls between the two. This is what the research notes (§9.3) decided.
-2. **Drop the parameter.** Send every retained event plus the summary, and let the server's retention and the Agent's token trimming control the size. No gap by construction, but it removes a control that every other n8n memory node has, and a store with summarization turned off would send the whole history.
-3. **Allow "0 = no limit".** Keep the parameter, default it to 0, and skip the slice when it is 0. Same effect as option 2 by default, while keeping the control for users who want it.
-
-**Recommendation:** Option 1. It keeps the node's parameters in line with the other memory nodes and fixes the gap in the default configuration. Option 3 is a good fallback if a user reports that the window hides turns in practice; option 2 removes a control users expect. Whichever is chosen, the description must state the trade-off, because the parameter name suggests the window is the only limit.
-
-### D5. Every 404 on GET and DELETE is treated as 'session does not exist'. A wrong Store ID, or a Server URL with a path suffix such as '/v1', therefore loads an empty history and reports a successful clear instead of a configuration error.
-
-**Locations:** `nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node.ts:155; memory.ts:85,146`
-
-**Evidence:**
-
-`allowNotFound` turns any NodeApiError with httpCode 404 into `undefined`, whatever the response body says. The Chat Trigger's 'Load Previous Session' and the Memory Manager's load and clear operations then succeed silently against a store that does not exist. Only the later POST in `addMessage` fails loudly. To avoid swallowing misconfiguration, check the error body for a session-not-found code, or check the store once at supply time.
-
-**Anchors:** `if (allowNotFound && String(apiError.httpCode) === '404') return undefined;`
-
-**Options:**
-
-1. **Swallow only the session-not-found error.** Read the 404 body and return `undefined` only when it carries the API's session-not-found code; rethrow every other 404. Needs the error body shape, which is not yet recorded; a contract test can pin it by comparing a missing session with a wrong store ID.
-2. **Check the store once per execution.** Call `GET /v1/stores/{storeId}/health` in `supplyData` and fail with a clear configuration error. One extra request per workflow run, and a wrong Server URL suffix also fails there.
-3. **Leave it to the credential test.** Rely on D10's credential test to catch a wrong store or URL when the credential is saved. Users can skip that test, and a store deleted later is never caught.
-
-**Recommendation:** Option 1 if the API's 404 bodies differ for a missing session and a missing store, with a contract test that pins both. If they do not differ, option 2, since one `GET` per execution is cheap next to the model call and gives a readable error. Option 3 alone is not enough. Both options should keep the `clear()` path tolerant of a missing session, which is the one 404 that is not an error.
-
-### D6. The window is applied to the events the server keeps after the summary. When the server keeps more than windowSize*2 events (20 by default), the turns between the summary point and the window are silently dropped: they are not in the summary and not in the window. The spec's fix for this was to treat the server as the main control and to say in the parameter description that older turns live in the summary. Neither was done: the default is still 10 and the description is unchanged.
-
-**Locations:** `nodes/RedisAgentMemoryChatMemory/memory.ts:174`
-
-**Evidence:**
-
-memory.ts:174 messages.slice(-this.memoryOptions.windowSize * 2) runs on session.events, which per specs/research.md:79 are the retained events after summarizedUpToEventId. The code never reads summarizedUpToEventId. specs/research.md:304 calls for a generous default window and a description noting that older turns live in the summary. RedisAgentMemoryChatMemory.node.ts:91-92 still has default 10 and 'How many past interactions the model receives as context'.
-
-**Anchors:** `SummaryAwareWindowedChatMemory.loadMessages windowing`
-
-**Options and recommendation:** same root cause as D4; see the decision there.
-
-### D8. The 'AI Agent with the Chat Trigger' tests share one session and depend on running in file order, so a single test cannot run alone and one failure cascades into misleading failures in later tests.
-
-**Locations:** `test/e2e/memory.test.ts:101`
-
-**Evidence:**
-
-`const sessionId = newChatSession('chat')` is created once in the describe body. 'sends the earlier turn...' (l.124) expects 'My name is Ada.' that only l.115 writes. 'returns the history to the chat widget...' (l.150) asserts exactly four messages written by l.115 and l.124. 'keeps the history across an n8n restart' (l.162) expects length 4 and 'My name is Ada.'. If you run `-t "sends the earlier turn"` alone, or l.115 fails, later tests fail with toContainEqual or length mismatches that do not point to the missing setup. Each test could seed its own session, for example through the Memory Manager insert webhook, or the dependency could be made explicit with `describe.sequential` and a seeding beforeAll.
-
-**Anchors:** `const sessionId = newChatSession('chat');`
-
-**Options:**
-
-1. **Each test seeds its own session.** The read-only tests ("returns the history to the chat widget", "keeps the history across an n8n restart") insert their turns through the Memory Manager insert webhook that the fixtures already provide, then assert. The two chat-turn tests become one two-turn test, since the second turn is the scenario under test.
-2. **Make the order explicit.** `describe.sequential` plus a `beforeAll` that sends the first turn. Tests still share one session, but a failing setup fails once, in the hook, with its own name.
-3. **One long test with named steps.** Simplest to write; one failure hides the later steps, and a single `it` cannot be run or skipped in parts.
-
-**Recommendation:** Option 1. The insert webhook makes seeding cheap, each test can run alone with `-t`, and a failure points at the test that owns the data. Keep the restart test as its own `describe` because it is slow and restarts the container; seed it the same way.
 
 ### D9. The summary feature (on by default) is never checked against the real service. Only canned unit data asserts the wire field `summary.text`, and the contract and e2e tests that touch this path cannot fail if the summary is missing or misread.
 
