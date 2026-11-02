@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IExecuteFunctions, IHttpRequestOptions, INode } from 'n8n-workflow';
+import { NodeApiError } from 'n8n-workflow';
 import { RedisAgentMemory } from '../../nodes/RedisAgentMemory/RedisAgentMemory.node';
 
 interface Setup {
@@ -441,15 +442,16 @@ describe('RedisAgentMemory: errors and items', () => {
 		expect(paired).toEqual([{ item: 0 }, { item: 0 }, { item: 1 }, { item: 1 }]);
 	});
 
-	it('fails the run on an API error', async () => {
-		await expect(
-			run({
-				parameters: { resource: 'longTermMemory', operation: 'get', memoryId: 'm1' },
-				respond: () => {
-					throw httpError(404);
-				},
-			}),
-		).rejects.toThrow();
+	it('fails the run with the API error and its status code', async () => {
+		const call = run({
+			parameters: { resource: 'longTermMemory', operation: 'get', memoryId: 'm1' },
+			respond: () => {
+				throw httpError(404);
+			},
+		});
+
+		await expect(call).rejects.toBeInstanceOf(NodeApiError);
+		await expect(call).rejects.toMatchObject({ httpCode: '404' });
 	});
 
 	it('returns the error as an item when Continue On Fail is on', async () => {

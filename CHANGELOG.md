@@ -17,3 +17,9 @@
 - A 404 counts as "session does not exist" only when the body is the API's own not-found (`type: /errors/resource-not-found`). Any other 404, such as a plain-text one from a proxy or a wrong URL, now fails the run. Errors that n8n's request helper has already wrapped keep the index of the item they belong to.
 - End-to-end tests: each test seeds its own session, so any one of them can run alone and a failure no longer cascades into the later tests.
 - `npm run format` and `npm run format:check` (prettier over the TypeScript and JavaScript sources); CI fails on unformatted code. All sources are formatted.
+- Tests: a recorded session response with a real server summary pins the summary wire shape, and an opt-in contract test (`AGENT_MEMORY_SUMMARY_TESTS=true`, on in CI) waits for a real summary and checks that it reaches the model and not the chat widget.
+- The credential test URL-encodes the Store ID, as the nodes do. A unit test resolves the credential test request with n8n's expression evaluator, and a contract test sends it to the real service.
+- The memory class extends the SDK's `BaseChatMemory` and owns its window rule, instead of extending `WindowedChatMemory` and overriding its only logic. No change in behaviour.
+- README states the tested n8n version (2.42.6, and nightly the latest release) instead of an untested minimum; `@n8n/ai-node-sdk` peer dependency is `>=0.32.4`.
+- Unit tests assert the error type and HTTP status of failed API calls instead of only that something threw.
+- The session wire types are exported from the memory module and the test client uses them, so the tests check the shape the node parses.

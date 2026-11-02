@@ -179,14 +179,16 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 			]);
 		});
 
-		it('returns the history to the chat widget without system messages', async () => {
+		// This session has no server summary, so it cannot show that the summary
+		// stays out of the widget; the contract test "server summary" and the
+		// recorded-session unit test cover that. This checks the plain path.
+		it('returns the seeded history to the chat widget', async () => {
 			const session = newChatSession('widget');
 			await insert(session, 'My name is Ada.', 'Echo: My name is Ada.');
 			await insert(session, 'What is my name?', 'Echo: What is my name?');
 
 			const messages = await loadPreviousSession(session.sessionId);
 
-			expect(messages.map((m) => messageType(m))).not.toContain('SystemMessage');
 			expect(messages.map((m) => [messageType(m), messageText(m)])).toEqual([
 				['HumanMessage', 'My name is Ada.'],
 				['AIMessage', 'Echo: My name is Ada.'],

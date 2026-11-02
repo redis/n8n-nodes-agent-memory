@@ -1,0 +1,274 @@
+{
+  "events": [
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 11: Tell me something about Lisbon. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:03Z",
+      "eventId": "e7c46caea46b46579397a2085ff05bfa",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:04.017Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about Lisbon: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local Lisbon community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:04Z",
+      "eventId": "bc124b9eb2ab4eb3ba644218bd01db47",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:04.511Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 12: Tell me something about sourdough bread. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:04Z",
+      "eventId": "7c3692e6b125473885468dd45d899cbb",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:05.063Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about sourdough bread: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local sourdough bread community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:05Z",
+      "eventId": "bed21f17c9e541978fce4e22cb9fffbc",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:05.559Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 13: Tell me something about the violin. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:05Z",
+      "eventId": "5432cdad1e59490c9f63430203d2e73c",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:06.069Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about the violin: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local the violin community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:06Z",
+      "eventId": "eaa44049c39d410389d2b9f59ef09ac4",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:06.563Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 14: Tell me something about marathon training. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:06Z",
+      "eventId": "289c41d8fa904687938515f023cf201b",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:07.054Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about marathon training: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local marathon training community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:07Z",
+      "eventId": "aa44d7a469934244a98a21a94e0df7f6",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:07.548Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 15: Tell me something about Rust programming. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:07Z",
+      "eventId": "d1f4b69e385d4ab5a127b6eadbfec9dc",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:08.041Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about Rust programming: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local Rust programming community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:08Z",
+      "eventId": "7cd0291706e64e20b00de01a19f1b054",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:08.526Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 16: Tell me something about houseplants. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:08Z",
+      "eventId": "69250b94218e475facf22a5b76b3a818",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:09.034Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about houseplants: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local houseplants community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:09Z",
+      "eventId": "687bed3bbbf540aabf071472cd8a4a65",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:09.538Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 17: Tell me something about sailing. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:09Z",
+      "eventId": "4a64fefcc4fb4f19aaf27b737eb6be94",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:10.043Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about sailing: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local sailing community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:10Z",
+      "eventId": "3f90279d5b0c47528149ff3fc2ae856c",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:10.532Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 18: Tell me something about chess openings. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:10Z",
+      "eventId": "229751e67f224b78afa68600caccfbb0",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:11.023Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about chess openings: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local chess openings community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:11Z",
+      "eventId": "1436ff26c5a248768f6d0ee3aacb9135",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:11.503Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 19: Tell me something about astronomy. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:11Z",
+      "eventId": "e227f4427e434922830643d6711b4697",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:11.987Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about astronomy: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local astronomy community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:12Z",
+      "eventId": "42a838264ef24c49b414e8de76c2fd1b",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:12.475Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Turn 20: Tell me something about Japanese cooking. I mentioned before that I live in Berlin and work as a data engineer."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:12Z",
+      "eventId": "21d6b4033c2946d989fee4ca4bdd1980",
+      "role": "USER",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:12.958Z"
+    },
+    {
+      "actorId": "user-it-d9-summary-cb81d29d",
+      "content": [
+        {
+          "text": "Sure. Here is a fact about Japanese cooking: it rewards patience and regular practice. Since you live in Berlin and work as a data engineer, you may enjoy the local Japanese cooking community."
+        }
+      ],
+      "createdAt": "2026-11-02T15:57:13Z",
+      "eventId": "61547b5499a147318074e6c78322f729",
+      "role": "ASSISTANT",
+      "sessionId": "it-d9-summary-cb81d29d",
+      "systemTimestamp": "2026-11-02T15:57:13.447Z"
+    }
+  ],
+  "ownerId": "user-it-d9-summary-cb81d29d",
+  "sessionId": "it-d9-summary-cb81d29d",
+  "summary": {
+    "createdAt": "2026-11-02T15:57:05.886Z",
+    "metadata": {},
+    "summarizedEvents": 20,
+    "summarizedUpToEventId": "3e5447b7982c438aa1faff066e5b0a3f",
+    "text": "The user, a data engineer from Berlin, asked about various topics including Lisbon, sourdough bread, the violin, marathon training, Rust programming, houseplants, sailing, chess openings, astronomy, and Japanese cooking. Each response highlighted the themes of patience and regular practice and awkwardly suggested engaging with respective local communities.",
+    "updatedAt": "2026-11-02T15:57:10.027Z"
+  }
+}

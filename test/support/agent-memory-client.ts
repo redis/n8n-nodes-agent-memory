@@ -1,3 +1,4 @@
+import type { AgentMemorySessionResponse } from '../../nodes/RedisAgentMemoryChatMemory/memory';
 import {
 	NOT_FOUND_ERROR_TYPE,
 	type AgentMemoryRequest,
@@ -22,20 +23,6 @@ function isResourceNotFound(body: string): boolean {
 	} catch {
 		return false;
 	}
-}
-
-export interface StoredSessionEvent {
-	eventId: string;
-	actorId: string;
-	role: 'USER' | 'ASSISTANT' | 'SYSTEM';
-	content: Array<{ text: string }>;
-}
-
-export interface StoredSession {
-	sessionId: string;
-	ownerId: string;
-	events: StoredSessionEvent[];
-	summary?: { text: string };
 }
 
 /**
@@ -86,8 +73,9 @@ export class AgentMemoryTestClient {
 		this.createdOwners.add(ownerId);
 	}
 
-	async getSession(sessionId: string): Promise<StoredSession | undefined> {
-		return await this.request<StoredSession>({
+	/** The stored session, in the wire shape the node parses. */
+	async getSession(sessionId: string): Promise<AgentMemorySessionResponse | undefined> {
+		return await this.request<AgentMemorySessionResponse>({
 			method: 'GET',
 			path: `/session-memory/${encodeURIComponent(sessionId)}`,
 			allowNotFound: true,

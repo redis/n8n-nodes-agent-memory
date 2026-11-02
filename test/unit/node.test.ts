@@ -159,14 +159,20 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		});
 	});
 
-	it('fails the run for other API errors', async () => {
+	it('fails the run for other API errors, with the status-specific message', async () => {
 		const { memory } = await supply({
 			respond: () => {
 				throw httpError(401);
 			},
 		});
 
-		await expect(memory.loadMemoryVariables({})).rejects.toThrow();
+		// The SDK's log wrapper rethrows the adapter's NodeApiError as a
+		// NodeOperationError (from its own copy of n8n-workflow, hence no
+		// instanceof) and keeps the message; the adapter's tests pin the status.
+		await expect(memory.loadMemoryVariables({})).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: 'Authorization failed - please check your credentials',
+		});
 	});
 
 	it('saves a turn as two session events with the user ID and namespace', async () => {

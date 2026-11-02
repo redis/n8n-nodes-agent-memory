@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from '@n8n/ai-node-sdk';
+import recordedSession from './fixtures/session-with-summary.json';
 import {
 	AgentMemoryChatHistory,
 	RECALL_MESSAGE_ID,
@@ -279,6 +280,27 @@ describe('SummaryAwareWindowedChatMemory', () => {
 		]);
 	});
 
+	it('saves a turn as a user and an assistant message, and clears through the history', async () => {
+		const { request, calls } = fakeRequest();
+		const memory = new SummaryAwareWindowedChatMemory(history(request), {
+			windowSize: 10,
+			includeSummary: true,
+		});
+
+		await memory.saveTurn('What is 2+2?', 'It is 4.');
+		await memory.clear();
+
+		expect(calls.map((c) => [c.method, c.path])).toEqual([
+			['POST', '/session-memory/events'],
+			['POST', '/session-memory/events'],
+			['DELETE', SESSION_PATH],
+		]);
+		expect(calls.slice(0, 2).map((c) => c.body)).toMatchObject([
+			{ role: 'USER', content: [{ text: 'What is 2+2?' }] },
+			{ role: 'ASSISTANT', content: [{ text: 'It is 4.' }] },
+		]);
+	});
+
 	it('leaves the summary out when includeSummary is off', async () => {
 		const { request } = fakeRequest(sessionWithSummary);
 		const memory = new SummaryAwareWindowedChatMemory(history(request), {
@@ -316,6 +338,58 @@ describe('SummaryAwareWindowedChatMemory', () => {
 			{ role: 'USER', content: [{ text: 'What is 2+2?' }] },
 			{ role: 'ASSISTANT', content: [{ text: 'It is 4.' }] },
 		]);
+	});
+});
+
+/**
+ * A real `GET …/session-memory/{sessionId}` response, recorded on 2026-11-02
+ * after 40 events: the server kept the last 20 and summarized the first 20.
+ * Pins the wire shape the fake responses above only assume.
+ */
+describe('recorded session with a server summary', () => {
+	const path = `/session-memory/${encodeURIComponent(recordedSession.sessionId)}`;
+
+	function recorded() {
+		const { request } = fakeRequest({ [`GET ${path}`]: recordedSession });
+		return new AgentMemoryChatHistory({
+			sessionId: recordedSession.sessionId,
+			actorId: recordedSession.ownerId,
+			request,
+		});
+	}
+
+	it('reads the summary from summary.text and the retained turns from events', async () => {
+		const session = await recorded().getSession();
+
+		expect(session.summary).toBe(recordedSession.summary.text);
+		expect(session.summary).toContain('data engineer from Berlin');
+		expect(session.messages).toHaveLength(recordedSession.events.length);
+		expect(session.messages.map((m) => m.role)).toEqual(
+			recordedSession.events.map((e) => (e.role === 'USER' ? 'user' : 'assistant')),
+		);
+		// The summary's boundary event is not among the retained ones.
+		expect(recordedSession.events.map((e) => e.eventId)).not.toContain(
+			recordedSession.summary.summarizedUpToEventId,
+		);
+	});
+
+	it('gives the model the summary first and the chat widget no summary at all', async () => {
+		const history = recorded();
+		const memory = new SummaryAwareWindowedChatMemory(history, {
+			windowSize: 50,
+			includeSummary: true,
+		});
+
+		const [first, ...rest] = await memory.loadMessages();
+		expect(first.id).toBe(SUMMARY_MESSAGE_ID);
+		expect(text(first)).toBe(
+			`Summary of the earlier conversation:\n${recordedSession.summary.text}`,
+		);
+		expect(rest.map((m) => m.id)).toEqual(recordedSession.events.map((e) => e.eventId));
+
+		const widget = await history.getMessages();
+		expect(widget.map((m) => m.id)).not.toContain(SUMMARY_MESSAGE_ID);
+		expect(widget.every((m) => m.role !== 'system')).toBe(true);
 	});
 });
 

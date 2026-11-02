@@ -25,7 +25,8 @@ This document records the background research behind `@redis/n8n-nodes-agent-mem
 10. [Agent Memory vs. plain Redis in n8n workflows](#10-agent-memory-vs-plain-redis-in-n8n-workflows)
 11. [Integration testing](#11-integration-testing)
 12. [Recommendations and open questions](#12-recommendations-and-open-questions)
-13. [Sources](#13-sources)
+13. [Review panel outcomes](#13-review-panel-outcomes)
+14. [Sources](#14-sources)
 
 ---
 
@@ -76,7 +77,7 @@ The SDK's operations map to these REST endpoints:
 **Data model highlights:**
 
 - **Session events.** Each event has `eventId`, `actorId`, `sessionId` and `role` (`USER` / `ASSISTANT` / `SYSTEM`). Its `content` is an array of `{ text }` parts, plus `createdAt` and optional `metadata`.
-- **Session memory response.** Returns the retained `events` plus an optional **`summary`**: a compacted summary of older turns maintained by a background summarization job (`summarizedUpToEventId`, `summarizedEvents`).
+- **Session memory response.** Returns the retained `events` plus an optional **`summary`**: a compacted summary of older turns maintained by a background summarization job. Its fields are `text`, `summarizedUpToEventId` (the boundary: this event and all before it are covered; `events` holds the turns after it), `summarizedEvents`, `createdAt`, `updatedAt` and `metadata`. Observed on the hosted store (2026-11-02): after 40 events the server kept the last 20 and summarized the first 20, and the summary appeared about 20 seconds after the last write. A recorded response is in `test/unit/fixtures/session-with-summary.json`.
 - **Memory records.** Fields are `id`, `text`, `memoryType`, `sessionId`, `ownerId`, `namespaceRef`, `topics`, typed `attributes` (for custom memory types), `createdAt` and `updatedAt`.
 - **Errors.** Every error is an RFC 9457 Problem Details body. The shapes, as verified against the hosted service, are in §2.1.
 - **Search.** Semantic search over long-term memory with:
@@ -244,7 +245,7 @@ This is a survey of npm packages (inspected 2026-10-01). "Memory sub-node" means
 **How it is wired in:**
 
 - **Package setup.** Declare it as a **peer dependency**, alongside `n8n-workflow`, and set `"aiNodeSdkVersion": 1` in the `n8n` block of `package.json`. n8n provides it at runtime, so the package keeps zero runtime dependencies.
-- **Minimum n8n version.** 2.16, per Cognee's PR.
+- **Minimum n8n version.** 2.16, per Cognee's PR. _(2026-11-02: nothing tests that floor, so the README claims only what the end-to-end suite runs on, n8n 2.42.6, plus the nightly run on the latest release, and `peerDependencies['@n8n/ai-node-sdk']` is `>=0.32.4`. Widen the claim when an older image joins the e2e matrix.)_
 - **Scaffolding.** The CLI generates the skeleton: `n8n-node new <name> --template programmatic/custom-chat-memory`.
 
 The pattern, as used in this repo's `nodes/RedisAgentMemoryChatMemory`:
@@ -263,6 +264,8 @@ return supplyMemory(this, memory);
 ```
 
 HTTP calls go through `this.helpers.httpRequestWithAuthentication`, using the credential's `authenticate` block (a bearer header).
+
+_(2026-11-02: the shipped class differs from the sketch in two ways. `SummaryAwareWindowedChatMemory` extends `BaseChatMemory`, not `WindowedChatMemory`: it has to apply the window itself in `loadMessages()`, to add the summary without a second request, and that was the parent's only logic, so inheriting it only looked like reuse; the window rule is the named helper `lastTurns()`, and `saveTurn()` and `clear()` are the SDK's few lines, owned here. And both nodes share one request adapter, `nodes/shared/agentMemoryRequest.ts`, which builds the store URL from the credential, maps failures to `NodeApiError` and treats a 404 as "does not exist" only for the API's own not-found body (§2.1). A typed client on top of it was considered and left out: the two nodes share three one-line path strings, each covered by a contract test.)_
 
 **Other AI templates in `@n8n/node-cli` 0.51:**
 
@@ -324,8 +327,8 @@ This is what the scaffolded `RedisAgentMemoryChatMemory` node does. It also fill
 - **The summary leaks into the chat widget.** The node adds the summary in `getMessages`, so the Chat Trigger returns it when the widget loads a previous session. The widget labels every message that isn't a `HumanMessage` as `bot`, so the summary appears as a bot reply, and the SDK cannot hide it (point 5). The widget also reads `kwargs.content` as text, but SDK messages carry an array of content blocks; rendering in the hosted chat needs a test. **Fix:** add the summary in `loadMessages` (the memory class), not in `getMessages` (the history class). Point 6 means the model still gets it and the widget does not.
 - **Chat Memory Manager's "Delete last N" rebuilds the session.** It reads all messages, calls `clear()`, then re-adds the rest one at a time. On Agent Memory that deletes the server summary, posts the summary back as a `SYSTEM` event, gives every event a new ID and timestamp, and may trigger extraction again, which risks duplicate long-term memories. "Insert" with "Override All" also calls `clear()`. **Fix:** the change above keeps the summary out of the re-added messages. Document "Delete last N" as unsupported; the action node's per-event delete is the safe alternative. _(2026-11-02: "Insert > Override All" is a delete and repost by design, so losing the summary and extracting from the new events is the intended result; only "Delete last N" misbehaves. Cognee's sub-node makes `clear()` throw, which blocks both operations; we cannot copy that because our `clear()` is the real "Delete > All", and the SDK's `ChatHistory` interface, with only `getMessages`, `addMessage(s)` and `clear`, gives the node no way to tell a rebuild from a delete followed by an insert. The README's "Chat Memory Manager" note records the outcome.)_
 - **Tool-call messages become extra assistant events.** When tools ran, the AI messages that carry tool calls arrive through `addMessages` with role `assistant`. The node drops tool results but would store any text in those messages, including n8n's synthetic "Calling X with input: …". **Fix:** skip assistant messages that contain tool-call blocks. (Done. On n8n 2.42.6, the end-to-end tests show this message arriving with no text, so nothing extra was stored there; the filter guards the synthetic-message case and other versions.)
-- **History is windowed three times.** The server keeps recent events and summarizes the rest, the node applies Context Window Length, and the Agent may trim by tokens. **Fix:** treat the server as the main control. Keep a generous default window and say in the parameter description that older turns live in the summary. _(2026-11-02: done. The default is 50 interactions and the maximum 500. The parameter description and the README say that the server trims the session first, that the summary covers only the turns the server has dropped, and that the window should not be lower than the number of turns the server retains, or a turn can fall between the two.)_
-- **The session ID is not a user ID.** The Chat Trigger supplies a `sessionId`, which the hosted widget keeps per browser in `localStorage`, but no user identity. Long-term memory is keyed by user, so cross-session recall needs a stable user ID: from the embedded chat's `metadata`, or a Telegram or Slack user ID. If a workflow passes the session ID as the user ID, long-term memory still works, but only within that session.
+- **History is windowed three times.** The server keeps recent events and summarizes the rest, the node applies Context Window Length, and the Agent may trim by tokens. **Fix:** treat the server as the main control. Keep a generous default window and say in the parameter description that older turns live in the summary. _(2026-11-02: done. On the hosted store the server retained 20 events, so the old default of 10 interactions was exactly at the edge and anything lower would have dropped turns. The default is 50 interactions and the maximum 500. The parameter description and the README say that the server trims the session first, that the summary covers only the turns the server has dropped, and that the window should not be lower than the number of turns the server retains, or a turn can fall between the two.)_
+- **The session ID is not a user ID.** The Chat Trigger supplies a `sessionId`, which the hosted widget keeps per browser in `localStorage`, but no user identity. Long-term memory is keyed by user, so cross-session recall needs a stable user ID: from the embedded chat's `metadata`, or a Telegram or Slack user ID. If a workflow passes the session ID as the user ID, long-term memory still works, but only within that session. _(2026-11-02: a probe showed the server sets a session's `ownerId` from its first event and then accepts events from any actor, so multi-user sessions are allowed by design. The node therefore requires a User ID, takes no identity from the session, and offers an opt-in **Verify Session Owner** option, off by default so it behaves like the other memory nodes, which fails instead of mixing two users' turns. The README's "Who may read a session" paragraph says that the trigger, not the node, authenticates callers.)_
 
 ### 9.4 Long-term memory does not fit the memory slot
 
@@ -471,6 +474,8 @@ Three layers, from fast to realistic:
 
 **Status (2026-10-09):** implemented as described; see [`docs/testing.md`](../docs/testing.md). One change: the Chat Memory Manager tests run through webhook-triggered workflows, not `n8n execute`, because `execute` cannot pass a per-run session ID. The tests have not yet run against the hosted service. Against a local fake of the session API, all 25 unit, 6 contract and 8 end-to-end tests pass. The Chat Trigger's "Load Previous Session" resolved `{{ $json.sessionId }}` correctly in n8n 2.42.6, even though it runs in a webhook context.
 
+**Status (2026-11-02):** the suite now has 69 unit, 14 contract (one opt-in) and 10 end-to-end tests, all passing against the hosted service and n8n 2.42.6. Changes since 2026-10-09, each from the review panel (§13): every e2e test seeds its own session through the Memory Manager insert webhook, so any test runs alone and a failure stays with its owner; the restart test is its own `describe` at the end. A recorded response with a real server summary (`test/unit/fixtures/session-with-summary.json`) pins the summary wire shape, and an opt-in contract test (`AGENT_MEMORY_SUMMARY_TESTS=true`, on in CI) writes 40 events, waits for the real summary and checks that it reaches the model and not the widget; the e2e `loadPreviousSession` test no longer claims to check that. The credential test's expressions are resolved with n8n's own evaluator in a unit test (encoded store ID) and sent to the real store in a contract test. Tests of failed API calls assert the error type and status code, not only that something threw. The test client imports the node's session wire types instead of keeping its own copy. `npm run format:check` runs in CI.
+
 ### 11.4 Test environment for Agent Memory
 
 Contract and end-to-end tests run against a **hosted Agent Memory service**, not a local container. Redis runs a QA deployment for this. The test harness supplies the connection through environment variables. The names follow the SDK's `AGENT_MEMORY_API_KEY`:
@@ -506,11 +511,33 @@ Contract and end-to-end tests run against a **hosted Agent Memory service**, not
 - Do `@n8n/ai-node-sdk`-based memory sub-nodes pass verification today? (Cognee's 0.7.0 memory node suggests yes, but this is unconfirmed.)
 - Should the "default memory" goal be pursued as a pull request to n8n core (where `memoryRedisChat` lives) instead of, or as well as, a community node?
 - Session ID mode: should the node mirror n8n's built-in memory nodes ("Connected Chat Trigger Node" vs "Define below")?
-- User ID source: with the hosted Chat Trigger there is no user identity. Should the node fall back to the session ID, or require a user ID and explain where to get one (§9.3)?
+- ~~User ID source: with the hosted Chat Trigger there is no user identity. Should the node fall back to the session ID, or require a user ID and explain where to get one (§9.3)?~~ _Settled 2026-11-02: the node requires a User ID and the README says where to take it from (§9.3)._
 - Does the hosted chat widget render SDK messages, whose content is an array of blocks, when it loads a previous session? This needs a test against a running n8n.
 - Long-term injection in the memory node (§9.4, option C): which defaults for result limit and similarity threshold, and how to label the injected system message?
 
-## 13. Sources
+## 13. Review panel outcomes
+
+A multi-agent review of commit 52b79b9 ("Implement the Iris Agent Memory node") ran on 2026-10-28: 10 reviewers, findings grouped by root cause, each blocker checked adversarially. It produced 3 blockers, 14 decision-relevant findings (D1–D14) and 4 refactoring proposals (P1–P4). All were closed between 2026-10-29 and 2026-11-02; the working file that tracked them (`specs/review-panel-results.md`) was then removed, and this table keeps the trail. Where a finding changed a design decision, the dated note sits in the section named.
+
+| Item | Finding | Outcome | Where |
+|---|---|---|---|
+| Blockers, D2 | Fixed on 2026-10-29 (commit ba57516), before this trail was kept, so the panel's own wording is not recorded. The commit's source changes: the summary and stored `SYSTEM` events reached the model as system messages after the Agent's own, which Anthropic and Gemini reject, and are user messages now; and a numeric or missing Session or User ID (a Telegram chat ID, an input without the field) crashed on `.trim()`, and is coerced first | Fixed | §9.3 |
+| D1 | Any caller who knows a session ID can read and extend it | Server sets `ownerId` from the first event and accepts any actor; opt-in **Verify Session Owner**, off by default; README explains that the trigger authenticates | §9.3 |
+| D3, D7 | Chat Memory Manager "Delete last N" and "Insert > Override All" rebuild the session | "Override All" is correct by design and has an e2e test; "Delete last N" is documented as unsupported; _Session → Delete Event_ on the action node is the supported way to trim | §9.3, §12 |
+| D4, D6 | A small Context Window Length can hide turns the summary does not cover yet | Default 50 (was 10), maximum 500, honest description and a README paragraph; the hosted store retains 20 events | §9.3 |
+| D5 | Every 404 treated as "session does not exist" | Verified: a wrong store or URL is a gateway 403, not a 404; the adapter swallows a 404 only with the API's `resource-not-found` body and keeps the item index | §2.1 |
+| D8 | E2e tests shared one session and depended on order | Each test seeds its own session; restart test isolated | §11.3 |
+| D9 | The summary was never checked against the real service | Recorded fixture plus an opt-in contract test with a real summary | §2, §11.3 |
+| D10 | Credential test did not URL-encode the store ID and was untested | Encoded; unit test with n8n's evaluator; contract test against the store | §11.3 |
+| D11 | Error tests asserted only that something threw | Error type and status code asserted | §11.3 |
+| D12 | README promised n8n ≥ 2.16, which nothing tests | README claims the tested version, 2.42.6; SDK peer range `>=0.32.4` | §8 |
+| D13, P4 | Memory class extended `WindowedChatMemory` but replaced its only logic | Extends `BaseChatMemory`; named window rule; dead constructor argument removed | §8 |
+| D14 | Two research documents | This file is the one research document | — |
+| P1 | REST layer split across files | The shared request adapter exists; a typed client on top was judged not worth it | §8 |
+| P2 | Test client redeclared the session wire types | Types exported from `memory.ts` and imported by the test client | §11.3 |
+| P3 | Credential test and node built the URL differently | Closed by D10 | §11.3 |
+
+## 14. Sources
 
 **n8n documentation:**
 

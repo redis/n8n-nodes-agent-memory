@@ -70,7 +70,7 @@ The credential test calls the store health endpoint.
 
 ## Compatibility
 
-- Requires an n8n version that ships `@n8n/ai-node-sdk` (n8n ≥ 2.16).
+- Tested on n8n 2.42.6 by the end-to-end suite, and nightly on the latest n8n release. Older versions that ship `@n8n/ai-node-sdk` may work but are not tested; `@n8n/ai-node-sdk` ≥ 0.32.4 is the version range this node is built against.
 - Built with `@n8n/node-cli` 0.51 and strict (Cloud-eligible) lint rules.
 
 ## Usage

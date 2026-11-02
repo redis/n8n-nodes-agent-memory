@@ -36,6 +36,13 @@ export const agentMemoryConfig: AgentMemoryTestConfig | undefined =
 			}
 		: undefined;
 
+/**
+ * Opt-in for the contract test that waits for a real server summary. It writes
+ * 40 events to a fresh session and polls for up to 90 seconds, so it is off
+ * unless `AGENT_MEMORY_SUMMARY_TESTS=true`. CI turns it on.
+ */
+export const summaryTests = process.env.AGENT_MEMORY_SUMMARY_TESTS === 'true';
+
 export const skipReason =
 	missingAgentMemoryEnv.length > 0
 		? `Skipped: set ${missingAgentMemoryEnv.join(', ')} (in the environment or .env) to run tests against Agent Memory`

@@ -1,4 +1,4 @@
-import { BaseChatHistory, WindowedChatMemory, type Message } from '@n8n/ai-node-sdk';
+import { BaseChatHistory, BaseChatMemory, type Message } from '@n8n/ai-node-sdk';
 import type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
 
 export type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
@@ -13,10 +13,13 @@ export const RECALL_MESSAGE_ID = 'agent-memory-recall';
  * Wire types for the Redis Agent Memory REST API (session memory subset).
  * Field names mirror the API's camelCase JSON. See the REST API reference:
  * https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/api-reference/
+ *
+ * Exported so the test client reads the same shape the node parses; a
+ * recorded response is in test/unit/fixtures/session-with-summary.json.
  */
-type AgentMemoryRole = 'USER' | 'ASSISTANT' | 'SYSTEM';
+export type AgentMemoryRole = 'USER' | 'ASSISTANT' | 'SYSTEM';
 
-interface AgentMemorySessionEvent {
+export interface AgentMemorySessionEvent {
 	eventId: string;
 	actorId: string;
 	sessionId: string;
@@ -25,11 +28,21 @@ interface AgentMemorySessionEvent {
 	createdAt: string;
 }
 
-interface AgentMemorySessionResponse {
+/** The server's summary of the turns before `summarizedUpToEventId`. */
+export interface AgentMemorySessionSummary {
+	text: string;
+	summarizedUpToEventId: string;
+	summarizedEvents: number;
+	createdAt: string;
+	updatedAt: string;
+	metadata?: Record<string, unknown>;
+}
+
+export interface AgentMemorySessionResponse {
 	sessionId: string;
 	ownerId: string;
 	events: AgentMemorySessionEvent[];
-	summary?: { text: string; summarizedUpToEventId: string };
+	summary?: AgentMemorySessionSummary;
 }
 
 /** A long-term memory record, as far as recall reads it. */
@@ -232,14 +245,11 @@ export interface SummaryAwareWindowedChatMemoryOptions {
  * Windowed memory that puts the session summary in front of the recent turns.
  *
  * The AI Agent reads history through `loadMessages()`, so only the model sees
- * the summary and the recalled long-term memories. `WindowedChatMemory` alone
- * keeps the last `windowSize * 2` messages; this variant windows the turns,
- * then adds the recalled memories and the summary as leading user messages.
- *
- * The window is applied to the turns the server retains, which are the ones
- * the summary does not cover yet. A window smaller than the server's
- * retention therefore drops turns that are in neither; the node's default is
- * generous for that reason.
+ * the summary and the recalled long-term memories. The SDK's
+ * `WindowedChatMemory` is not reused: its only logic is the window, which
+ * `loadMessages()` here must apply itself to avoid a second request for the
+ * summary. The window rule is `lastTurns()`, and `saveTurn()` and `clear()`
+ * are the SDK's few lines, owned here.
  *
  * The Agent's prompt starts with its own system message, so history lands
  * after it. Some chat models (Anthropic, Gemini) reject a system message in
@@ -247,29 +257,27 @@ export interface SummaryAwareWindowedChatMemoryOptions {
  * memories, the summary and stored SYSTEM events reach the model as user
  * messages.
  */
-export class SummaryAwareWindowedChatMemory extends WindowedChatMemory {
+export class SummaryAwareWindowedChatMemory extends BaseChatMemory {
 	constructor(
-		private readonly agentMemoryHistory: AgentMemoryChatHistory,
+		readonly chatHistory: AgentMemoryChatHistory,
 		private readonly memoryOptions: SummaryAwareWindowedChatMemoryOptions,
 	) {
-		super(agentMemoryHistory, { windowSize: memoryOptions.windowSize });
+		super();
 	}
 
 	async loadMessages(): Promise<Message[]> {
 		const { recall, includeSummary, windowSize } = this.memoryOptions;
 		const query = recall?.query.trim();
 		const [{ summary, messages }, recalled] = await Promise.all([
-			this.agentMemoryHistory.getSession(),
+			this.chatHistory.getSession(),
 			recall && query
-				? this.agentMemoryHistory.searchLongTermMemories(query, recall.limit)
+				? this.chatHistory.searchLongTermMemories(query, recall.limit)
 				: Promise.resolve([]),
 		]);
 
-		const windowed = messages
-			.slice(-windowSize * 2)
-			.map(
-				(message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message),
-			);
+		const windowed = lastTurns(messages, windowSize).map(
+			(message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message),
+		);
 
 		const leading: Message[] = [];
 		if (recalled.length > 0) {
@@ -296,4 +304,23 @@ export class SummaryAwareWindowedChatMemory extends WindowedChatMemory {
 
 		return [...leading, ...windowed];
 	}
+
+	async saveTurn(input: string, output: string): Promise<void> {
+		await this.chatHistory.addMessages([
+			{ role: 'user', content: [{ type: 'text', text: input }] },
+			{ role: 'assistant', content: [{ type: 'text', text: output }] },
+		]);
+	}
+
+	async clear(): Promise<void> {
+		await this.chatHistory.clear();
+	}
+}
+
+/**
+ * The window rule: the last `windowSize` interactions, two messages each.
+ * Applied to the turns the server retains (see the class comment).
+ */
+function lastTurns(messages: Message[], windowSize: number): Message[] {
+	return messages.slice(-windowSize * 2);
 }

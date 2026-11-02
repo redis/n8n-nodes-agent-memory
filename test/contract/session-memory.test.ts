@@ -1,11 +1,13 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { sleep } from 'n8n-workflow';
 import {
 	AgentMemoryChatHistory,
+	SUMMARY_MESSAGE_ID,
 	SummaryAwareWindowedChatMemory,
 } from '../../nodes/RedisAgentMemoryChatMemory/memory';
 import { NOT_FOUND_ERROR_TYPE } from '../../nodes/shared/agentMemoryRequest';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
-import { agentMemoryConfig, runPrefix, skipReason } from '../support/env';
+import { agentMemoryConfig, runPrefix, skipReason, summaryTests } from '../support/env';
 
 /**
  * Runs the node's chat history against the hosted Agent Memory service, with
@@ -193,6 +195,53 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 			).rejects.toThrow(`belongs to user "${a.actorId}"`);
 			expect((await client.getSession(a.sessionId))?.events).toHaveLength(1);
 		});
+	});
+
+	// Opt-in (AGENT_MEMORY_SUMMARY_TESTS=true): writes 40 events and waits for the
+	// server's background summary, which took about 20 seconds on the hosted store.
+	describe.skipIf(!summaryTests)('server summary', () => {
+		it('puts the summary in front of the retained turns for the model, and never in getMessages()', async () => {
+			const { sessionId, history } = newSession();
+			const topics = ['Lisbon', 'sourdough', 'the violin', 'marathons', 'Rust', 'houseplants'];
+			for (let i = 0; i < 20; i++) {
+				const topic = topics[i % topics.length];
+				await history.addMessages([
+					{
+						role: 'user',
+						content: [{ type: 'text', text: `Turn ${i + 1}: tell me about ${topic}.` }],
+					},
+					{
+						role: 'assistant',
+						content: [{ type: 'text', text: `About ${topic}: it rewards patience.` }],
+					},
+				]);
+			}
+
+			const deadline = Date.now() + 90_000;
+			let stored = await client.getSession(sessionId);
+			while (!stored?.summary && Date.now() < deadline) {
+				await sleep(5_000);
+				stored = await client.getSession(sessionId);
+			}
+			expect(stored?.summary?.text, 'the server produced no summary within 90 s').toBeTruthy();
+			expect(stored!.events.length).toBeLessThan(40);
+
+			const memory = new SummaryAwareWindowedChatMemory(history, {
+				windowSize: 50,
+				includeSummary: true,
+			});
+			const [first, ...rest] = await memory.loadMessages();
+			expect(first.id).toBe(SUMMARY_MESSAGE_ID);
+			expect(first.role).toBe('user');
+			expect(first.content).toEqual([
+				{ type: 'text', text: `Summary of the earlier conversation:\n${stored!.summary!.text}` },
+			]);
+			expect(rest).toHaveLength(stored!.events.length);
+
+			const widget = await history.getMessages();
+			expect(widget).toHaveLength(stored!.events.length);
+			expect(widget.map((m) => m.id)).not.toContain(SUMMARY_MESSAGE_ID);
+		}, 120_000);
 	});
 
 	it('recalls long-term memories created directly, scoped to the user', async () => {
