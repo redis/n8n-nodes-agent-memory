@@ -4,6 +4,15 @@ export default defineConfig({
 	// Hide Vite's sourcemap warnings for n8n-workflow, which ships maps without sources.
 	logLevel: 'error',
 	test: {
+		// Coverage is collected only by `npm run test:coverage`. The unit tests
+		// cover the shipped sources; the e2e tests run them inside Docker, where
+		// nothing can be measured.
+		coverage: {
+			provider: 'v8',
+			include: ['nodes/**/*.ts', 'credentials/**/*.ts'],
+			reporter: ['text', 'lcovonly'],
+			reportsDirectory: 'coverage',
+		},
 		projects: [
 			{
 				test: {

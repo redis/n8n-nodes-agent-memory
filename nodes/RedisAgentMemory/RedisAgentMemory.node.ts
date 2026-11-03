@@ -147,8 +147,8 @@ export class RedisAgentMemory implements INodeType {
 		displayName: 'Redis Agent Memory',
 		name: 'redisAgentMemory',
 		icon: {
-			light: 'file:../RedisAgentMemoryChatMemory/memory.svg',
-			dark: 'file:../RedisAgentMemoryChatMemory/memory.dark.svg',
+			light: 'file:../../icons/memory.svg',
+			dark: 'file:../../icons/memory.dark.svg',
 		},
 		group: ['transform'],
 		version: 1,

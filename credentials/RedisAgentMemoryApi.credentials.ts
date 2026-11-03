@@ -11,8 +11,8 @@ export class RedisAgentMemoryApi implements ICredentialType {
 	displayName = 'Redis Agent Memory API';
 
 	icon = {
-		light: 'file:../nodes/RedisAgentMemoryChatMemory/memory.svg',
-		dark: 'file:../nodes/RedisAgentMemoryChatMemory/memory.dark.svg',
+		light: 'file:../icons/memory.svg',
+		dark: 'file:../icons/memory.dark.svg',
 	} as const;
 
 	documentationUrl = 'https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/';
