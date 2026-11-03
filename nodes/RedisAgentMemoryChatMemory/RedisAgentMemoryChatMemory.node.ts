@@ -26,7 +26,7 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Redis Agent Chat Memory',
 		name: 'redisAgentMemoryChatMemory',
-		icon: { light: 'file:memory.svg', dark: 'file:memory.dark.svg' },
+		icon: { light: 'file:../../icons/memory.svg', dark: 'file:../../icons/memory.dark.svg' },
 		group: ['transform'],
 		version: [1],
 		subtitle: 'Session memory',

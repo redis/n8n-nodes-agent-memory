@@ -1,14 +1,45 @@
-# @redis/n8n-nodes-agent-memory
+# Redis Agent Memory for n8n
 
-This is an n8n community node. It lets you use [Redis Agent Memory](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/) as the memory for n8n AI Agents.
+Memory for n8n AI Agents, backed by [Redis Agent Memory](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/): session history with server-side summaries, and long-term memory that the agent can search and save.
 
-Redis Agent Memory is a memory service for AI agents. It keeps the conversation history for each session and summarizes older turns in the background. It also extracts lasting facts into long-term memory that is searchable across sessions.
+[![CI](https://github.com/redis/n8n-nodes-agent-memory/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redis/n8n-nodes-agent-memory/actions/workflows/ci.yml)
+[![E2E](https://github.com/redis/n8n-nodes-agent-memory/actions/workflows/e2e.yml/badge.svg?branch=main)](https://github.com/redis/n8n-nodes-agent-memory/actions/workflows/e2e.yml)
+[![Coverage](https://codecov.io/gh/redis/n8n-nodes-agent-memory/branch/main/graph/badge.svg)](https://codecov.io/gh/redis/n8n-nodes-agent-memory)
+[![npm version](https://img.shields.io/npm/v/%40redis%2Fn8n-nodes-agent-memory?logo=npm&logoColor=white)](https://www.npmjs.com/package/@redis/n8n-nodes-agent-memory)
+[![n8n community node](https://img.shields.io/badge/n8n-community%20node-EA4B71?logo=n8n&logoColor=white)](https://docs.n8n.io/integrations/community-nodes/)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Prettier](https://img.shields.io/badge/code%20style-prettier-F7B93E?logo=prettier&logoColor=white)](https://prettier.io/)
+[![npm downloads](https://img.shields.io/npm/dm/%40redis%2Fn8n-nodes-agent-memory?label=downloads%2Fmonth)](https://www.npmjs.com/package/@redis/n8n-nodes-agent-memory)
+[![Docs](https://img.shields.io/badge/docs-Redis%20Agent%20Memory-DC382D?logo=redis&logoColor=white)](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/)
+
+[![Discord](https://img.shields.io/discord/697882427875393627.svg?style=social&logo=discord)](https://discord.gg/redis)
+[![Twitch](https://img.shields.io/twitch/status/redisinc?style=social)](https://www.twitch.tv/redisinc)
+[![YouTube](https://img.shields.io/youtube/channel/views/UCD78lHSwYqMlyetR0_P4Vig?style=social)](https://www.youtube.com/redisinc)
+[![Twitter](https://img.shields.io/twitter/follow/redisinc?style=social)](https://twitter.com/redisinc)
+
+### Features
+
+- **Drop-in agent memory** — attach **Redis Agent Chat Memory** to an AI Agent's Memory input. Recent turns are replayed to the model; the server folds older turns into a summary.
+- **Long-term memory** — Agent Memory extracts lasting facts from each conversation. They are searchable by meaning across sessions, and the sub-node can recall them on every turn.
+- **Memory as a tool** — **Redis Agent Memory Tool** lets the agent search and save memories when it decides to. The same node, as the **Redis Agent Memory** action node, manages memories, sessions and namespaces from a workflow.
+- **Full REST coverage** — long-term memories, sessions and namespaces, one operation per REST call on the credential's store.
+- **Per-user isolation** — a pinned **User ID** keeps one user's memories away from another; an optional owner check refuses sessions that belong to someone else.
+- **No runtime dependencies** — calls the Agent Memory REST API through n8n's HTTP helpers, and passes n8n's strict (Cloud-eligible) lint rules.
+
+### Requirements
+
+| Dependency           | Supported versions                                                      |
+|----------------------|-------------------------------------------------------------------------|
+| n8n                  | 2.42.6 tested; releases that ship `@n8n/ai-node-sdk`                    |
+| `@n8n/ai-node-sdk`   | 0.32.4+, provided by n8n                                                |
+| Redis Agent Memory   | a store on an Agent Memory service, with an API key                     |
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
 
-> **Status: 0.1.0, unreleased.** Both nodes are implemented: **Redis Agent Chat Memory** (memory sub-node) and **Redis Agent Memory** (action and tool node). See [docs/research.md](docs/research.md) for background and design decisions.
+> **Status: 0.1.0, unreleased.** Both nodes are implemented: **Redis Agent Chat Memory** (memory sub-node) and **Redis Agent Memory** (action node, listed as **Redis Agent Memory Tool** in the AI Agent's Tool picker).
 
-[Installation](#installation) · [Nodes](#nodes) · [Credentials](#credentials) · [Compatibility](#compatibility) · [Usage](#usage) · [Development](#development) · [Resources](#resources)
+[Installation](#installation) · [Nodes](#nodes) · [Credentials](#credentials) · [Compatibility](#compatibility) · [Usage](#usage) · [Development](#development) · [Resources](#resources) · [Contributing](#contributing) · [Security](#security)
 
 ## Installation
 
@@ -41,9 +72,9 @@ Connects to the **Memory** input of an AI Agent.
 
 **Chat Memory Manager.** *Get Many Messages* and *Insert Messages* work. *Insert Messages* with *Override All Messages* replaces the session: the summary is dropped and the new messages are extracted as new content. *Delete Messages* with *All Messages* deletes the session. *Delete Messages* with *Last N* is not supported: n8n implements it by deleting the session and re-inserting the kept turns, which drops the summary and may extract the same facts again. To trim a session, use the action node's **Session → Delete Event**; to correct or remove what was learned, use **Long-Term Memory → Search** and **Delete**.
 
-### Redis Agent Memory (action and tool node)
+### Redis Agent Memory (action node) and Redis Agent Memory Tool
 
-Manages what the memory sub-node writes, and lets an AI Agent search and save memories on purpose. Each operation is one REST call on the credential's store.
+One node with two faces. In the node list it is **Redis Agent Memory**, an action node that manages what the memory sub-node writes. In an AI Agent's Tool picker n8n lists the same node as **Redis Agent Memory Tool**, and there it lets the agent search and save memories on purpose. Each operation is one REST call on the credential's store.
 
 | Resource | Operations |
 |---|---|
@@ -51,7 +82,7 @@ Manages what the memory sub-node writes, and lets an AI Agent search and save me
 | Session | Get, Get Many, Delete, Add Event, Delete Event |
 | Namespace | Create, Get, Get Many, Update, Delete |
 
-**As an AI Agent tool.** Attach one instance per operation to the Agent's **Tool** input and pin everything but the content: set **Resource**, **Operation** and **User ID** yourself, and let the model fill **Query** (Search) or **Text** (Create) with *Let the model define this parameter*. Two instances cover most agents:
+**Redis Agent Memory Tool.** Attach one **Redis Agent Memory Tool** per operation to the Agent's **Tool** input and pin everything but the content: set **Resource**, **Operation** and **User ID** yourself, and let the model fill **Query** (Search) or **Text** (Create) with *Let the model define this parameter*. Two instances cover most agents:
 
 - *Search memories*: Long-Term Memory → Search, User ID fixed. The agent calls it when it needs something it was told before.
 - *Save memory*: Long-Term Memory → Create, User ID fixed. The agent calls it to remember a fact right away, without waiting for extraction.
@@ -62,9 +93,9 @@ Never let the model fill **User ID**: that is what keeps one user's memories awa
 
 Create a **Redis Agent Memory API** credential with:
 
-- **Server URL**: the base URL of your Agent Memory service.
-- **Store ID**: the store to use.
-- **API Key**: the credential issued for your Agent Memory service or store. It is sent as a bearer token.
+- **Server URL**: found in the `AI Services / Iris / Agent Memory` page, `Configuration` tab, `General Settings` section
+- **Store ID**: found in the `AI Services / Iris / Agent Memory` page, `Configuration` tab, `General Settings` section
+- **API Key**: found in the `AI Services / Iris / Agent Memory` page, `API Keys` tab
 
 The credential test calls the store health endpoint.
 
@@ -79,7 +110,7 @@ The credential test calls the store health endpoint.
 2. Attach **Redis Agent Chat Memory** to the Agent's **Memory** input.
 3. Set **User ID** to a stable identifier for the end user, taken from the authenticated trigger (a JWT claim, a Telegram or Slack sender ID), not from the request body.
 4. Chat. Recent turns are replayed to the model, older turns are summarized, and facts about the user accumulate in long-term memory.
-5. To bring those facts back in later conversations, either turn on **Options → Recall Long-Term Memories** on the memory sub-node (every turn, no wiring), or attach the action node as a **Search memories** tool (the agent decides when to look). Both can be combined.
+5. To bring those facts back in later conversations, either turn on **Options → Recall Long-Term Memories** on the memory sub-node (every turn, no wiring), or attach a **Redis Agent Memory Tool** set to Long-Term Memory → Search (the agent decides when to look). Both can be combined.
 
 ## Development
 
@@ -89,9 +120,13 @@ npm run dev        # builds and starts n8n with this node at http://localhost:56
 npm run lint       # n8n community-node lint rules (must pass for verification)
 npm run format     # prettier over the TypeScript and JavaScript sources; CI checks this
 npm run build
+npm run ci         # everything CI runs: ci:build, then ci:e2e
+npm run ci:build   # the CI workflow: format:check, lint, typecheck, test:coverage, build
 npm test           # unit tests, no network
+npm run test:coverage  # the same, with a coverage report in coverage/
 npm run e2e:up     # n8n in Docker with this package, for manual testing at http://127.0.0.1:15678
 npm run e2e:down   # stop it
+npm run ci:e2e     # the E2E workflow: test:contract, then test:e2e
 ```
 
 Contract and end-to-end tests run against a hosted Agent Memory service, and the end-to-end tests run the node inside a real n8n in Docker. See [docs/testing.md](docs/testing.md).
@@ -101,13 +136,7 @@ Notes:
 - `npm run dev` runs n8n in a container from n8n 3.0 onward, so Docker or Podman is required. Use `npx n8n-node dev --external-n8n` to attach to your own instance instead.
 - This package must have **no runtime dependencies**. It calls the Agent Memory REST API through n8n's HTTP helpers, not through the `@redis-iris/agent-memory` SDK. `@n8n/ai-node-sdk` and `n8n-workflow` are peer dependencies provided by n8n.
 - Guidance for coding agents and contributors is in [AGENTS.md](AGENTS.md) and `.agents/`. These files were generated by `n8n-node`.
-
-### Releasing
-
-Releases are published to npm **only** from GitHub Actions ([`.github/workflows/publish.yml`](.github/workflows/publish.yml)) with npm provenance. n8n requires this for verification from 1 May 2026.
-
-1. Configure npm Trusted Publishing for `redis/n8n-nodes-agent-memory` → `publish.yml`, or set an `NPM_TOKEN` secret.
-2. Run `npm run release` locally. It bumps the version, updates the changelog and pushes a tag. The tag triggers the publish workflow.
+- [CONTRIBUTING.md](CONTRIBUTING.md) lists the checks CI runs, the test layers and the release process.
 
 ## Resources
 
