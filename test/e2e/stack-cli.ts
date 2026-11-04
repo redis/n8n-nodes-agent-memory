@@ -27,6 +27,7 @@ n8n is running with this package installed.
   LLM stub:  ${LLM_STUB_URL}/_requests shows what the agent sent to the model
 ${agentMemoryConfig ? '' : `\n  Note: ${skipReason.replace('Skipped: set', 'Set')}.\n  Until then, fill in the "Agent Memory (e2e)" credential in the editor.\n`}
 To pick up code changes, run npm run e2e:up again: it rebuilds and starts afresh.
+To run the tests against this stack: E2E_REUSE_STACK=true npm run test:e2e
 Stop with: npm run e2e:down`);
 			return;
 		}

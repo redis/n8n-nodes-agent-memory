@@ -49,6 +49,7 @@ export interface AgentMemorySessionResponse {
 export interface AgentMemoryRecord {
 	id: string;
 	text: string;
+	ownerId?: string;
 	memoryType?: string;
 	topics?: string[];
 }
@@ -183,7 +184,11 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 				},
 			},
 		});
-		return response?.items ?? [];
+		// The search is scoped to the user; should the store return another
+		// user's record anyway, it must not reach the model.
+		return (response?.items ?? []).filter(
+			(record) => record.ownerId === undefined || record.ownerId === this.options.actorId,
+		);
 	}
 
 	async addMessage(message: Message): Promise<void> {

@@ -104,7 +104,16 @@ export async function loadPreviousSession(sessionId: string): Promise<Serialized
 }
 
 export interface StubRequest {
-	messages: Array<{ role: string; content: unknown; tool_calls?: unknown[] }>;
+	messages: Array<{
+		role: string;
+		content: unknown;
+		tool_calls?: unknown[];
+		tool_call_id?: string;
+	}>;
+	tools?: Array<{
+		type: string;
+		function: { name: string; description?: string; parameters?: unknown };
+	}>;
 }
 
 /** The text of an OpenAI message, whose content is a string or a list of parts. */
@@ -119,6 +128,16 @@ export function stubMessageText(message: StubRequest['messages'][number]): strin
 
 export async function stubRequests(): Promise<StubRequest[]> {
 	return (await (await fetch(`${LLM_STUB_URL}/_requests`)).json()) as StubRequest[];
+}
+
+/**
+ * The recorded requests whose JSON contains `text`, oldest first. Filter on a
+ * marker of your own (a session ID, a unique query) instead of `resetStub()`
+ * when other test files share the stub.
+ */
+export async function stubRequestsContaining(text: string): Promise<StubRequest[]> {
+	const url = `${LLM_STUB_URL}/_requests?contains=${encodeURIComponent(text)}`;
+	return (await (await fetch(url)).json()) as StubRequest[];
 }
 
 export async function resetStub(): Promise<void> {

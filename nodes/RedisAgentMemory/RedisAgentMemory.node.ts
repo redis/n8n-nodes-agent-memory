@@ -268,6 +268,29 @@ class Operations {
 		return { pageSize: Math.min(limit, MAX_PAGE_SIZE), max: limit };
 	}
 
+	/**
+	 * The User ID is the one search filter the user must never be able to
+	 * loosen. The API applies a single conjunction to every filter field, so a
+	 * "match any" request would OR the owner away and return other users'
+	 * memories. Search therefore sends no `filterOp`, and this check refuses to
+	 * pass on a memory of another user should the store return one anyway.
+	 */
+	private ownedBy(items: IDataObject[], ownerId: string): IDataObject[] {
+		const foreign = items.find((item) => item.ownerId !== undefined && item.ownerId !== ownerId);
+		if (foreign) {
+			throw new NodeOperationError(
+				this.node,
+				`The store returned a memory of user "${String(foreign.ownerId)}" for a search scoped to user "${ownerId}"`,
+				{
+					itemIndex: this.itemIndex,
+					description:
+						'The node did not pass it on. The store did not apply the User ID filter; report this to Redis.',
+				},
+			);
+		}
+		return items;
+	}
+
 	private unknownOperation(resource: string, operation: string): never {
 		throw new NodeOperationError(
 			this.node,
@@ -282,22 +305,21 @@ class Operations {
 				const query = this.required('query', 'Query');
 				const ownerId = this.required('ownerId', 'User ID');
 				const maxResults = this.param<number>('maxResults', 10);
-				const options = this.param<
-					MemoryFields & { filterOp?: string; similarityThreshold?: number }
-				>('options', {});
+				// Workflows saved before 0.1.0 may still carry a `filterOp` option
+				// here. It is left out on purpose; see `ownedBy`.
+				const options = this.param<MemoryFields & { similarityThreshold?: number }>('options', {});
 				const body: IDataObject = {
 					text: query,
 					limit: maxResults,
 					filter: memoryFilter({ ...options, ownerId }),
 				};
-				if (options.filterOp && options.filterOp !== 'all') body.filterOp = options.filterOp;
 				if (options.similarityThreshold) body.similarityThreshold = options.similarityThreshold;
 				const page = await this.request<Page<IDataObject>>({
 					method: 'POST',
 					path: '/long-term-memory/search',
 					body,
 				});
-				return page?.items ?? [];
+				return this.ownedBy(page?.items ?? [], ownerId);
 			}
 			case 'getAll': {
 				const filters = this.param<MemoryFields>('filters', {});

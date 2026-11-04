@@ -75,7 +75,6 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				options: {
 					namespaceId: 'ns-1',
 					topics: 'food, travel',
-					filterOp: 'any',
 					similarityThreshold: 0.4,
 				},
 			},
@@ -89,7 +88,6 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			body: {
 				text: 'What food does the user like?',
 				limit: 3,
-				filterOp: 'any',
 				similarityThreshold: 0.4,
 				filter: {
 					ownerId: { eq: 'user-1' },
@@ -101,14 +99,17 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		expect(output.map((m) => m.text)).toEqual(['Likes spicy food', 'Vegetarian']);
 	});
 
-	it('leaves the default filter match and a zero threshold out of the request', async () => {
+	// Older workflows may still carry a Filter Match option. The API applies one
+	// conjunction to every filter, so "any" would OR the User ID away; the node
+	// never sends it.
+	it('ignores a Filter Match left in an older workflow and a zero threshold', async () => {
 		const { requests } = await run({
 			parameters: {
 				resource: 'longTermMemory',
 				operation: 'search',
 				query: 'q',
 				ownerId: 'user-1',
-				options: { filterOp: 'all', similarityThreshold: 0 },
+				options: { filterOp: 'any', similarityThreshold: 0 },
 			},
 			respond: () => ({ items: [] }),
 		});
@@ -117,6 +118,25 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			text: 'q',
 			limit: 10,
 			filter: { ownerId: { eq: 'user-1' } },
+		});
+	});
+
+	it('refuses to pass on a search result that belongs to another user', async () => {
+		const call = run({
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'search',
+				query: 'q',
+				ownerId: 'user-1',
+			},
+			respond: () => ({
+				items: [record('m1', 'Mine'), { ...record('m2', 'Theirs'), ownerId: 'user-2' }],
+			}),
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: expect.stringContaining('user-2'),
 		});
 	});
 

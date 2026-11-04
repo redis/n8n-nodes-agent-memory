@@ -536,4 +536,26 @@ describe('SummaryAwareWindowedChatMemory with recall', () => {
 
 		expect(calls.map((call) => call.method)).toEqual(['GET']);
 	});
+
+	it('drops a recalled memory that belongs to another user', async () => {
+		const { request } = fakeRequest({
+			...session,
+			'POST /long-term-memory/search': {
+				items: [
+					{ id: 'm1', text: 'Mine', ownerId: 'user-1' },
+					{ id: 'm2', text: 'Theirs', ownerId: 'user-2' },
+				],
+			},
+		});
+		const memory = new SummaryAwareWindowedChatMemory(history(request), {
+			windowSize: 10,
+			includeSummary: true,
+			recall: { query: 'anything', limit: 5 },
+		});
+
+		const recalled = (await memory.loadMessages()).find((m) => m.id === RECALL_MESSAGE_ID);
+
+		expect(recalled && text(recalled)).toContain('Mine');
+		expect(recalled && text(recalled)).not.toContain('Theirs');
+	});
 });

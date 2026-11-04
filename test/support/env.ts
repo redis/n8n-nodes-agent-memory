@@ -43,6 +43,13 @@ export const agentMemoryConfig: AgentMemoryTestConfig | undefined =
  */
 export const summaryTests = process.env.AGENT_MEMORY_SUMMARY_TESTS === 'true';
 
+/**
+ * Opt-in for the scenario file that sends wrong credentials to the gateway.
+ * A wrong key sent often earns a Cloudflare ban, so it is off unless
+ * `E2E_CREDENTIAL_TESTS=true`. The nightly run turns it on.
+ */
+export const credentialTests = process.env.E2E_CREDENTIAL_TESTS === 'true';
+
 export const skipReason =
 	missingAgentMemoryEnv.length > 0
 		? `Skipped: set ${missingAgentMemoryEnv.join(', ')} (in the environment or .env) to run tests against Agent Memory`

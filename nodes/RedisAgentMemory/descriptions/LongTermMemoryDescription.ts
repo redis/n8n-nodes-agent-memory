@@ -124,17 +124,6 @@ export const longTermMemoryFields: INodeProperties[] = [
 		displayOptions: show(['search']),
 		options: [
 			{
-				displayName: 'Filter Match',
-				name: 'filterOp',
-				type: 'options',
-				options: [
-					{ name: 'All Filters', value: 'all' },
-					{ name: 'Any Filter', value: 'any' },
-				],
-				default: 'all',
-				description: 'Whether a memory must match all of the filters below or any one of them',
-			},
-			{
 				displayName: 'Memory Type',
 				name: 'memoryType',
 				type: 'string',

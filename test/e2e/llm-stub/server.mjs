@@ -2,16 +2,32 @@
 // model provider. Replies are deterministic, and every request is recorded so
 // tests can check what the AI Agent sent, including the history from memory.
 //
-//   POST   /v1/chat/completions  answer a chat completion (JSON or streamed)
-//   GET    /_requests            the recorded request bodies, oldest first
-//   DELETE /_requests            forget the recorded requests
+//   POST   /v1/chat/completions         answer a chat completion (JSON or streamed)
+//   GET    /_requests                   the recorded request bodies, oldest first
+//   GET    /_requests?contains=<text>   only the requests whose JSON contains <text>
+//   DELETE /_requests                   forget the recorded requests
 //
-// Replies:
-//   - after a tool result:             "The answer is <result>."
-//   - "calculate <expression>":        a call to the first tool, with the expression
-//   - anything else:                   "Echo: <last user message>"
+// The stub keeps the last 1000 requests. Test files that share the stub
+// should filter with `contains=` on a marker of their own (a session ID or a
+// unique query) instead of deleting, which would pull data from under other
+// files.
+//
+// Replies, decided by the last user message unless a tool just answered:
+//   - after a tool result:                      "The answer is <result>." where
+//                                               <result> is what the tool returned
+//   - "use tool <name> with <json-object>":     a call to the tool named <name>,
+//                                               with exactly that JSON as arguments;
+//                                               when no such tool was offered, a
+//                                               text reply listing the tools
+//   - "calculate <expression>":                 a call to the first tool, with the expression
+//   - anything else:                            "Echo: <last user message>"
+//
+// Tool names arrive in body.tools[].function.name. n8n builds them from the
+// node name, with every character outside [A-Za-z0-9_-] replaced by "_":
+// a node called "Search memories" is the tool "Search_memories".
 import { createServer } from 'node:http';
 
+const MAX_REQUESTS = 1000;
 const requests = [];
 let sequence = 0;
 
@@ -33,6 +49,15 @@ function toolResult(content) {
 	return content;
 }
 
+function toolCall(name, args) {
+	sequence += 1;
+	return {
+		id: `call_${sequence}`,
+		type: 'function',
+		function: { name, arguments: JSON.stringify(args) },
+	};
+}
+
 function reply(body) {
 	const messages = body.messages ?? [];
 	const last = messages[messages.length - 1] ?? {};
@@ -42,20 +67,31 @@ function reply(body) {
 	}
 
 	const userText = text([...messages].reverse().find((m) => m.role === 'user')?.content);
+	const tools = (body.tools ?? []).map((t) => t.function).filter(Boolean);
+
+	const named = /use tool\s+(\S+)\s+with\s+(\{[\s\S]*\})/i.exec(userText);
+	if (named) {
+		const [, name, argumentsJson] = named;
+		if (!tools.some((t) => t.name === name)) {
+			const offered = tools.map((t) => t.name).join(', ') || 'none';
+			return { content: `No tool named ${name}. Tools offered: ${offered}.` };
+		}
+		let args;
+		try {
+			args = JSON.parse(argumentsJson);
+		} catch {
+			return { content: `The arguments for ${name} are not a JSON object: ${argumentsJson}` };
+		}
+		return { content: `Calling ${name}.`, toolCalls: [toolCall(name, args)] };
+	}
+
 	const match = /calculate\s+(.+)/i.exec(userText);
-	const tool = body.tools?.[0]?.function;
+	const tool = tools[0];
 	if (match && tool) {
 		const argument = Object.keys(tool.parameters?.properties ?? { input: {} })[0] ?? 'input';
-		sequence += 1;
 		return {
 			content: 'Let me calculate that.',
-			toolCalls: [
-				{
-					id: `call_${sequence}`,
-					type: 'function',
-					function: { name: tool.name, arguments: JSON.stringify({ [argument]: match[1].trim() }) },
-				},
-			],
+			toolCalls: [toolCall(tool.name, { [argument]: match[1].trim() })],
 		};
 	}
 
@@ -114,9 +150,16 @@ const server = createServer((req, res) => {
 	const chunks = [];
 	req.on('data', (chunk) => chunks.push(chunk));
 	req.on('end', () => {
-		const path = new URL(req.url ?? '/', 'http://stub').pathname;
+		const url = new URL(req.url ?? '/', 'http://stub');
+		const path = url.pathname;
 
-		if (path === '/_requests' && req.method === 'GET') return json(res, 200, requests);
+		if (path === '/_requests' && req.method === 'GET') {
+			const contains = url.searchParams.get('contains');
+			const selected = contains
+				? requests.filter((r) => JSON.stringify(r).includes(contains))
+				: requests;
+			return json(res, 200, selected);
+		}
 		if (path === '/_requests' && req.method === 'DELETE') {
 			requests.length = 0;
 			return json(res, 200, { deleted: true });
@@ -129,6 +172,7 @@ const server = createServer((req, res) => {
 				return json(res, 400, { error: { message: 'Request body is not JSON' } });
 			}
 			requests.push(body);
+			if (requests.length > MAX_REQUESTS) requests.splice(0, requests.length - MAX_REQUESTS);
 			const answer = reply(body);
 			return body.stream ? stream(res, body, answer) : json(res, 200, completion(body, answer));
 		}
