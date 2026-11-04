@@ -74,7 +74,9 @@
 			"parameters": {
 				"sessionId": "={{ $json.sessionId }}",
 				"actorId": "={{ 'user-' + $json.sessionId }}",
-				"options": {}
+				"options": {
+					"windowSize": "={{ $json.windowSize ?? 50 }}"
+				}
 			},
 			"credentials": {
 				"redisAgentMemoryApi": {
@@ -93,6 +95,30 @@
 				220
 			],
 			"parameters": {}
+		},
+		{
+			"id": "node-search-tool",
+			"name": "Search memories",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryTool",
+			"typeVersion": 1,
+			"position": [
+				640,
+				220
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "search",
+				"query": "={{ $fromAI('query', 'what to look for', 'string') }}",
+				"ownerId": "e2e-search-tool-user-with-no-memories",
+				"maxResults": 5,
+				"options": {}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
 		}
 	],
 	"connections": {
@@ -135,6 +161,17 @@
 			]
 		},
 		"Calculator": {
+			"ai_tool": [
+				[
+					{
+						"node": "AI Agent",
+						"type": "ai_tool",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Search memories": {
 			"ai_tool": [
 				[
 					{

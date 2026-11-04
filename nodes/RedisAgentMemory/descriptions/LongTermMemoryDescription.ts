@@ -124,17 +124,6 @@ export const longTermMemoryFields: INodeProperties[] = [
 		displayOptions: show(['search']),
 		options: [
 			{
-				displayName: 'Filter Match',
-				name: 'filterOp',
-				type: 'options',
-				options: [
-					{ name: 'All Filters', value: 'all' },
-					{ name: 'Any Filter', value: 'any' },
-				],
-				default: 'all',
-				description: 'Whether a memory must match all of the filters below or any one of them',
-			},
-			{
 				displayName: 'Memory Type',
 				name: 'memoryType',
 				type: 'string',
@@ -263,7 +252,7 @@ export const longTermMemoryFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description:
-					'ID for the new memory, letters, digits and dashes. Creating the same ID twice does not create a duplicate. Generated when empty.',
+					"ID for the new memory: letters, digits and dashes. Creating the same ID again replaces the memory's text, type and topics. Generated when empty.",
 			},
 			{
 				displayName: 'Memory Type',

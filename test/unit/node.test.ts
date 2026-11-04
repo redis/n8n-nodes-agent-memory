@@ -199,22 +199,131 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		]);
 	});
 
-	it.each([
-		['sessionId', "'Session ID' is empty"],
-		['actorId', "'User ID' is empty"],
-	])('rejects an empty %s', async (name, message) => {
-		const { ctx } = context({ parameters: { [name]: '  ' } });
+	// n8n shows a sub-node error as "Error in sub-node …" with the node's
+	// message demoted to the description and the node's own description
+	// dropped, so the message itself must carry the hint.
+	const EMPTY_ID_ERRORS = [
+		[
+			'sessionId',
+			"'Session ID' is empty. Set a session ID, for example from the chat trigger output.",
+			'Set a session ID, for example from the chat trigger output',
+		],
+		[
+			'actorId',
+			"'User ID' is empty. Set the ID of the user this conversation belongs to.",
+			'Set the ID of the user this conversation belongs to',
+		],
+	] as const;
+
+	it.each(EMPTY_ID_ERRORS)(
+		'rejects an empty %s with the hint in the message',
+		async (name, message, description) => {
+			const { ctx } = context({ parameters: { [name]: '  ' } });
+
+			await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toMatchObject({
+				name: 'NodeOperationError',
+				message,
+				description,
+				context: { itemIndex: 0 },
+			});
+		},
+	);
+
+	it.each(EMPTY_ID_ERRORS)('rejects a missing %s with its own message', async (name, message) => {
+		const { ctx } = context({ parameters: { [name]: undefined } });
 
 		await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
 	});
 
-	it.each([
-		['sessionId', "'Session ID' is empty"],
-		['actorId', "'User ID' is empty"],
-	])('rejects a missing %s with its own message', async (name, message) => {
-		const { ctx } = context({ parameters: { [name]: undefined } });
+	describe('Context Window Length', () => {
+		const events = Array.from({ length: 102 }, (_, i) => ({
+			eventId: `e${i}`,
+			role: i % 2 === 0 ? 'USER' : 'ASSISTANT',
+			content: [{ text: `turn ${i}` }],
+		}));
 
-		await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
+		it.each([[''], [null], [undefined]])(
+			'uses the default of 50 interactions when the option resolves to %j',
+			async (windowSize) => {
+				const { memory } = await supply({
+					parameters: { options: { windowSize, includeSummary: false } },
+					respond: () => ({ events }),
+				});
+
+				const { chat_history } = await memory.loadMemoryVariables({});
+
+				expect(chat_history).toHaveLength(100);
+				expect(chat_history[0].id).toBe('e2');
+			},
+		);
+
+		it('accepts the string "1" from an expression as 1', async () => {
+			const { memory } = await supply({
+				parameters: { options: { windowSize: '1', includeSummary: false } },
+				respond: () => ({ events }),
+			});
+
+			const { chat_history } = await memory.loadMemoryVariables({});
+
+			expect(chat_history.map((m) => m.id)).toEqual(['e100', 'e101']);
+		});
+
+		it.each([[0], ['abc'], [-1], [1.5]])('rejects %j before any request', async (windowSize) => {
+			const { ctx, requests } = context({ parameters: { options: { windowSize } } });
+
+			await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toMatchObject({
+				name: 'NodeOperationError',
+				message: "'Context Window Length' must be a whole number of 1 or more",
+				context: { itemIndex: 0 },
+			});
+			expect(requests).toEqual([]);
+		});
+	});
+
+	describe('Recall Long-Term Memories', () => {
+		const SEARCH_URL = 'https://memory.example.com/v1/stores/store%2F1/long-term-memory/search';
+		const respond = (options: IHttpRequestOptions) =>
+			options.url === SEARCH_URL
+				? { items: [{ id: 'm1', text: 'The user is vegetarian' }] }
+				: { events: [{ eventId: 'e1', role: 'USER', content: [{ text: 'Hi' }] }] };
+
+		it('searches with the top-level Recall Query and Recall Limit when the switch is on', async () => {
+			const { memory, requests } = await supply({
+				parameters: { recallLongTermMemories: true, recallQuery: 'food', recallLimit: 2 },
+				respond,
+			});
+
+			const { chat_history } = await memory.loadMemoryVariables({});
+
+			const search = requests.find((r) => r.options.url === SEARCH_URL);
+			expect(search?.options).toMatchObject({
+				method: 'POST',
+				body: { text: 'food', limit: 2, filter: { ownerId: { eq: 'user-1' } } },
+			});
+			expect(chat_history.map((m) => [m.getType(), m.content])).toEqual([
+				[
+					'human',
+					[
+						{
+							type: 'text',
+							text: 'Long-term memories about the user, from earlier conversations:\n- The user is vegetarian',
+						},
+					],
+				],
+				['human', [{ type: 'text', text: 'Hi' }]],
+			]);
+		});
+
+		it('ignores recall settings that an older workflow left in Options', async () => {
+			const { memory, requests } = await supply({
+				parameters: { options: { recallLongTermMemories: true, recallQuery: 'food' } },
+				respond,
+			});
+
+			await memory.loadMemoryVariables({});
+
+			expect(requests.map((r) => r.options.method)).toEqual(['GET']);
+		});
 	});
 
 	it('accepts numeric session and user IDs', async () => {

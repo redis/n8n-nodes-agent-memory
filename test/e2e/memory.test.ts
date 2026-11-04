@@ -2,7 +2,12 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
 import { agentMemoryConfig, runPrefix, skipReason } from '../support/env';
 import {
+	callWebhookAndWait,
+	CHAT_AGENT_WORKFLOW,
+	CHAT_WEBHOOK_PATH,
+	executionError,
 	loadPreviousSession,
+	MEMORY_MANAGER_WORKFLOW,
 	messageText,
 	messageType,
 	postJson,
@@ -19,6 +24,12 @@ interface Session {
 	sessionId: string;
 	userId: string;
 }
+
+/** The first line of the message that carries recalled long-term memories. */
+const RECALL_HEADER = 'Long-term memories about the user, from earlier conversations:';
+
+/** The chat URL of fixtures/workflows/chat-agent-recall.json, the agent with recall on. */
+const RECALL_CHAT_WEBHOOK_PATH = '6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0011/chat';
 
 /**
  * Runs the node inside a real n8n (see docker-compose.yml), against the hosted
@@ -75,6 +86,13 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 		);
 		if (!request) throw new Error(`The model never received "${chatInput}"`);
 		return request;
+	}
+
+	/** The messages between the Agent's system message and the current user message. */
+	function historyOf(request: StubRequest): Array<[string, string]> {
+		const messages = request.messages.map((m): [string, string] => [m.role, stubMessageText(m)]);
+		const start = messages[0]?.[0] === 'system' ? 1 : 0;
+		return messages.slice(start, -1);
 	}
 
 	beforeEach(async () => {
@@ -195,6 +213,161 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 				['HumanMessage', 'What is my name?'],
 				['AIMessage', 'Echo: What is my name?'],
 			]);
+		});
+	});
+
+	// Each test here pins a fix to a defect the first end-to-end run of the
+	// node surfaced (docs/testing.md, "How the design was verified"). The chat agent fixture
+	// reads the window from the chat body and carries the Search tool next to
+	// the Calculator. Recall has a chat workflow of its own: the server
+	// extracts long-term memories from sessions in the background, so an
+	// agent with recall on could add a recall message to the history that the
+	// tests above compare in full.
+	describe('fixes verified inside n8n', () => {
+		// Recall ran only with a Recall Query typed under Options; the switch
+		// alone did nothing. The query now defaults to the chat input.
+		it('recalls a long-term memory with only the recall switch on', async () => {
+			const session = newChatSession('recall');
+			await client.request({
+				method: 'POST',
+				path: '/long-term-memory',
+				body: {
+					memories: [
+						{
+							id: `${session.sessionId}-m1`,
+							ownerId: session.userId,
+							text: 'The user is vegetarian',
+						},
+					],
+				},
+			});
+
+			const { output } = await postJson<{ output: string }>(
+				`/webhook/${RECALL_CHAT_WEBHOOK_PATH}`,
+				{ action: 'sendMessage', sessionId: session.sessionId, chatInput: 'What do I eat?' },
+			);
+
+			expect(output).toBe('Echo: What do I eat?');
+			expect(historyOf(lastRequestFor(await stubRequests(), 'What do I eat?'))).toEqual([
+				['user', `${RECALL_HEADER}\n- The user is vegetarian`],
+			]);
+			// The recalled memory is shown to the model, not written back to the session.
+			expect(await storedTexts(session.sessionId)).toEqual([
+				['USER', 'What do I eat?'],
+				['ASSISTANT', 'Echo: What do I eat?'],
+			]);
+		});
+
+		// n8n shows only the message of a sub-node error, so the hint in the
+		// description was lost; the message carries it now.
+		it('shows the hint when the Session ID is empty', async () => {
+			const { response, execution } = await callWebhookAndWait(
+				CHAT_AGENT_WORKFLOW,
+				CHAT_WEBHOOK_PATH,
+				{ action: 'sendMessage', sessionId: '', chatInput: 'hello' },
+			);
+
+			expect(response.status).toBe(500);
+			const error = executionError(execution);
+			expect(error?.nodeName).toBe('Redis Agent Chat Memory');
+			expect(`${error?.message} ${error?.description}`).toContain(
+				'Set a session ID, for example from the chat trigger output',
+			);
+		});
+
+		// A window that resolved to something other than a number turned the
+		// window off without a word. An empty value means the default.
+		it('fails the run when the window resolves to "abc"', async () => {
+			const session = newChatSession('window-abc');
+
+			const { response, execution } = await callWebhookAndWait(
+				CHAT_AGENT_WORKFLOW,
+				CHAT_WEBHOOK_PATH,
+				{
+					action: 'sendMessage',
+					sessionId: session.sessionId,
+					chatInput: 'hello',
+					windowSize: 'abc',
+				},
+			);
+
+			expect(response.status).toBe(500);
+			const error = executionError(execution);
+			expect(error).toMatchObject({
+				nodeName: 'Redis Agent Chat Memory',
+				type: 'NodeOperationError',
+			});
+			expect(`${error?.message} ${error?.description}`).toContain(
+				"'Context Window Length' must be a whole number of 1 or more",
+			);
+			expect(await client.getSession(session.sessionId)).toBeUndefined();
+		});
+
+		it('sends every turn when the window resolves to ""', async () => {
+			const session = newChatSession('window-empty');
+			await insert(session, 'question 1', 'answer 1');
+			await insert(session, 'question 2', 'answer 2');
+			await insert(session, 'question 3', 'answer 3');
+
+			await postJson(`/webhook/${CHAT_WEBHOOK_PATH}`, {
+				action: 'sendMessage',
+				sessionId: session.sessionId,
+				chatInput: 'question 4',
+				windowSize: '',
+			});
+
+			expect(historyOf(lastRequestFor(await stubRequests(), 'question 4'))).toEqual([
+				['user', 'question 1'],
+				['assistant', 'answer 1'],
+				['user', 'question 2'],
+				['assistant', 'answer 2'],
+				['user', 'question 3'],
+				['assistant', 'answer 3'],
+			]);
+		});
+
+		// The owner check threw a plain Error, which n8n showed on the Memory
+		// Manager instead of on the memory node.
+		it('shows the owner mismatch on the memory sub-node', async () => {
+			const session = newSession('owner');
+			const intruder = `${runPrefix}-intruder-${counter}`;
+			client.track(session.sessionId, intruder);
+			await insert(session, 'question 1', 'answer 1');
+
+			const { response, execution } = await callWebhookAndWait(
+				MEMORY_MANAGER_WORKFLOW,
+				'e2e-memory-insert-verified',
+				{ sessionId: session.sessionId, userId: intruder, user: 'question 2', ai: 'answer 2' },
+			);
+
+			expect(response.status).toBe(500);
+			expect(executionError(execution)).toMatchObject({
+				nodeName: 'Redis Agent Chat Memory (verify owner)',
+				type: 'NodeOperationError',
+				message:
+					`Session "${session.sessionId}" belongs to user "${session.userId}", not to the configured User ID "${intruder}". ` +
+					'Use a session ID derived from the user, or turn off "Verify Session Owner" for shared sessions.',
+			});
+			expect(await storedTexts(session.sessionId)).toHaveLength(2);
+		});
+
+		// As a tool, a search with no hits gave the model the JSON string "",
+		// which it could not read; it now gets one item that says so.
+		it('tells the model that no memory matched when the Search tool finds nothing', async () => {
+			const { sessionId } = newChatSession('tool-search');
+
+			const output = await sendChatMessage(
+				sessionId,
+				'use tool Search_memories with {"query":"anything"}',
+			);
+
+			const toolMessage = (await stubRequests())
+				.flatMap((r) => r.messages)
+				.find((m) => m.role === 'tool');
+			if (!toolMessage) throw new Error('The model received no tool result');
+			const toolResult = stubMessageText(toolMessage);
+			expect(JSON.parse(toolResult)).toEqual([{ message: 'No memories matched' }]);
+			expect(output).toBe(`The answer is ${toolResult}.`);
 		});
 	});
 

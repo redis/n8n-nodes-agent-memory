@@ -29,7 +29,7 @@ services:
       N8N_VERSION_NOTIFICATIONS_ENABLED: 'false'
       N8N_PERSONALIZATION_ENABLED: 'false'
       N8N_LOG_LEVEL: ${E2E_N8N_LOG_LEVEL:-info}
-      # A preset owner, for logging in from a browser (see OWNER in stack.ts).
+      # A preset owner, for logging in from a browser (see OWNER in harness.ts).
       # The hash is bcrypt of the test password; $$ escapes $ for Compose.
       N8N_INSTANCE_OWNER_MANAGED_BY_ENV: 'true'
       N8N_INSTANCE_OWNER_EMAIL: e2e@example.com

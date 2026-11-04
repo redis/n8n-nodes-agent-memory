@@ -80,7 +80,8 @@ export const namespaceFields: INodeProperties[] = [
 			{ name: 'Shared', value: 'SHARED' },
 		],
 		default: 'SHARED',
-		description: 'Whether the namespace belongs to one user (set User ID below) or is shared',
+		description:
+			"Whether the namespace belongs to one user (set User ID below) or is shared. Ignored when Parent ID is set: a child inherits its parent's scope.",
 		displayOptions: show(['create']),
 	},
 	{
@@ -96,7 +97,8 @@ export const namespaceFields: INodeProperties[] = [
 				name: 'parentId',
 				type: 'string',
 				default: '',
-				description: 'ID of the parent namespace, to nest this one under it',
+				description:
+					'ID of the parent namespace, to nest this one under it. The child takes the scope and user of its parent.',
 			},
 			{
 				displayName: 'User ID',
@@ -148,15 +150,12 @@ export const namespaceFields: INodeProperties[] = [
 				description: 'New name of the namespace',
 			},
 			{
-				displayName: 'State',
-				name: 'state',
-				type: 'options',
-				options: [
-					{ name: 'Active', value: 'ACTIVE' },
-					{ name: 'Archived', value: 'ARCHIVED' },
-				],
-				default: 'ACTIVE',
-				description: 'Whether the namespace is in use or archived',
+				displayName: 'Archive',
+				name: 'archive',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to archive the namespace. The API cannot make an archived namespace active again.',
 			},
 		],
 	},

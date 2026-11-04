@@ -2,7 +2,7 @@
 
 The tests come in three layers, from fast to realistic. The background and the
 survey of how other community nodes test are in
-[`research.md`](research.md), §11.
+[`design-draft.md`](design-draft.md), §11.
 
 | Layer | Command | Needs | What it checks |
 |---|---|---|---|
@@ -85,6 +85,18 @@ insert and load, separate sessions, clearing, Insert with Override All, a
 second turn that sees the first, a turn with a tool call, loading a previous
 session without the summary, and history that survives an n8n restart. They
 also read the stored events straight from the Agent Memory API.
+[`test/e2e/action-node.test.ts`](../test/e2e/action-node.test.ts) drives the
+action node through webhooks. Both files end with a group of tests that pin
+the fixes from the design verification below, one per fix.
+
+Two small helpers serve those tests. `harness.ts` can log in to n8n as the
+preset owner and read the saved execution of a webhook call, so a test can
+assert the `message`, `description`, `httpCode` and node name the editor shows
+on a failed node; a webhook alone answers only `500 Error in workflow`. And a
+chat message of the form `use tool <name> with <json-object>` makes the stub
+model call that tool with those arguments (n8n names a tool after its node,
+with spaces as `_`, so "Search memories" is `Search_memories`), which is how a
+test makes the AI Agent run the action node as a tool.
 
 Each test seeds its own session: the read-only ones write their turns through
 the insert webhook first. So any test can run alone, for example
@@ -151,6 +163,33 @@ After each test run and each `e2e:down`, the container logs are in
   `AGENT_MEMORY_*` repository secrets; without them, for example on pull
   requests from forks, the tests skip. On failure it uploads the container
   logs.
+
+## How the design was verified
+
+On 2026-11-03 a one-off scenario suite ran the nodes inside n8n against the
+hosted store: 217 tests in nine files, built as a matrix of every option of
+the memory sub-node, the action node and its tool face against conditions
+such as existing or missing data, another user's data, namespaces, valid
+strings of every kind (emoji, CRLF, 20 KB, JSON as text, numbers from
+expressions) and invalid input. Each file created its own workflows through
+n8n's REST API and read the saved executions, so it could assert what the
+editor shows on a failed node and what a tool-calling model receives. It did
+not wait for the server's extraction or summaries.
+
+It found nine defects and ten usability problems in the node. All were fixed
+on 2026-11-04 except one that sits in `@n8n/ai-utilities` (the Chat Memory
+Manager's Simplify Output returns content parts, not strings). Among the
+defects: Search with "Filter Match = Any" returned other users' memories;
+"Recall Long-Term Memories" did nothing unless Recall Query was also added;
+a child namespace could never be created; Session → Get Many and Long-Term
+Memory → Get Many failed without a filter; and every server error reached the
+user as n8n's generic status text. Each fix was verified the same way: unit
+tests written first and failing, the fix, the tests passing; the matching
+e2e test failing against the previous build and passing after a rebuild.
+
+The suite itself was then retired to keep the test setup small. The tests that
+verify the fixes live on in the two e2e files, and the server's input rules it
+established are in [`design-draft.md`](design-draft.md), §11.5.
 
 ## Lint exceptions
 

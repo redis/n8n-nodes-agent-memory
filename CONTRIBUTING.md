@@ -118,7 +118,7 @@ npm run e2e:down   # stop it
 
 - `README.md` is the user-facing documentation and is shown on npm.
 - `docs/testing.md` describes the test layers and the end-to-end stack.
-- `docs/research.md` holds the background and design decisions.
+- `docs/design-draft.md` holds the background and design decisions.
 - `AGENTS.md` and `.agents/` guide coding agents and contributors.
 
 Every user-visible change gets a line in `CHANGELOG.md` under the unreleased

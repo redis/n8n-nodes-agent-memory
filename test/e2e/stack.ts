@@ -1,26 +1,39 @@
 /*
  * Test harness code: it runs in Node during tests and is never published
  * (package.json "files" ships only dist). The n8n Cloud rules below guard
- * node code, which must not spawn processes or embed secrets. OWNER's
- * password is not a secret: it opens a local, test-only n8n.
+ * node code, which must not spawn processes.
  */
-/* eslint-disable @n8n/community-nodes/no-restricted-imports, @n8n/community-nodes/no-dangerous-functions, @n8n/community-nodes/require-node-api-error, @n8n/community-nodes/no-hardcoded-secrets, no-console */
+/* eslint-disable @n8n/community-nodes/no-restricted-imports, @n8n/community-nodes/no-dangerous-functions, @n8n/community-nodes/require-node-api-error, no-console */
 import { execFileSync } from 'node:child_process';
-import { chmodSync, cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	chmodSync,
+	cpSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { agentMemoryConfig } from '../support/env';
 import { compose, E2E_DIR, waitForN8n, WORK_DIR } from './harness';
 
 const ROOT = resolve(E2E_DIR, '..', '..');
+const FIXTURE_WORKFLOWS = resolve(E2E_DIR, 'fixtures', 'workflows');
 
-/** IDs of the workflows in fixtures/workflows. */
-const WORKFLOW_IDS = ['e2eMemoryManager', 'e2eChatAgent0001', 'e2eActionNode001'];
-
-/**
- * The owner account preset by docker-compose.yml, for logging in from a
- * browser. The stack listens on 127.0.0.1 only and holds test data only.
- */
-export const OWNER = { email: 'e2e@example.com', password: 'E2e-test-password1' };
+/** The `id` of every workflow file in fixtures/workflows. */
+function fixtureWorkflowIds(): string[] {
+	return readdirSync(FIXTURE_WORKFLOWS)
+		.filter((file) => file.endsWith('.json'))
+		.sort()
+		.map((file) => {
+			const { id } = JSON.parse(readFileSync(resolve(FIXTURE_WORKFLOWS, file), 'utf8')) as {
+				id?: string;
+			};
+			if (!id) throw new Error(`fixtures/workflows/${file} has no "id"`);
+			return id;
+		});
+}
 
 /** Copies only what npm would publish, so peers resolve from n8n, not from our node_modules. */
 function stagePackage(): void {
@@ -41,9 +54,7 @@ function stagePackage(): void {
  */
 function stageFixtures(): void {
 	const fixtures = resolve(WORK_DIR, 'fixtures');
-	cpSync(resolve(E2E_DIR, 'fixtures', 'workflows'), resolve(fixtures, 'workflows'), {
-		recursive: true,
-	});
+	cpSync(FIXTURE_WORKFLOWS, resolve(fixtures, 'workflows'), { recursive: true });
 	const credentials = [
 		{
 			id: 'e2eAgentMemory01',
@@ -90,7 +101,7 @@ export async function startStack(): Promise<void> {
 		'--input=/fixtures/workflows',
 	]);
 	// In regular mode, import cannot activate workflows; publishing does.
-	for (const id of WORKFLOW_IDS) {
+	for (const id of fixtureWorkflowIds()) {
 		compose(['run', '--rm', '--no-deps', 'n8n', 'publish:workflow', `--id=${id}`]);
 	}
 	compose(['up', '--detach']);

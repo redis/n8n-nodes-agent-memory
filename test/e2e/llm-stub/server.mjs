@@ -6,10 +6,20 @@
 //   GET    /_requests            the recorded request bodies, oldest first
 //   DELETE /_requests            forget the recorded requests
 //
-// Replies:
-//   - after a tool result:             "The answer is <result>."
-//   - "calculate <expression>":        a call to the first tool, with the expression
-//   - anything else:                   "Echo: <last user message>"
+// Replies, decided by the last user message unless a tool just answered:
+//   - after a tool result:                   "The answer is <result>." where
+//                                            <result> is what the tool returned
+//   - "use tool <name> with <json-object>":  a call to the tool named <name>,
+//                                            with exactly that JSON as arguments;
+//                                            when no such tool was offered, a
+//                                            text reply listing the tools
+//   - "calculate <expression>":              a call to the Calculator tool, or
+//                                            to the first tool, with the expression
+//   - anything else:                         "Echo: <last user message>"
+//
+// Tool names arrive in body.tools[].function.name. n8n builds them from the
+// node name, with every character outside [A-Za-z0-9_-] replaced by "_":
+// a node called "Search memories" is the tool "Search_memories".
 import { createServer } from 'node:http';
 
 const requests = [];
@@ -33,6 +43,15 @@ function toolResult(content) {
 	return content;
 }
 
+function toolCall(name, args) {
+	sequence += 1;
+	return {
+		id: `call_${sequence}`,
+		type: 'function',
+		function: { name, arguments: JSON.stringify(args) },
+	};
+}
+
 function reply(body) {
 	const messages = body.messages ?? [];
 	const last = messages[messages.length - 1] ?? {};
@@ -42,20 +61,31 @@ function reply(body) {
 	}
 
 	const userText = text([...messages].reverse().find((m) => m.role === 'user')?.content);
+	const tools = (body.tools ?? []).map((t) => t.function).filter(Boolean);
+
+	const named = /use tool\s+(\S+)\s+with\s+(\{[\s\S]*\})/i.exec(userText);
+	if (named) {
+		const [, name, argumentsJson] = named;
+		if (!tools.some((t) => t.name === name)) {
+			const offered = tools.map((t) => t.name).join(', ') || 'none';
+			return { content: `No tool named ${name}. Tools offered: ${offered}.` };
+		}
+		let args;
+		try {
+			args = JSON.parse(argumentsJson);
+		} catch {
+			return { content: `The arguments for ${name} are not a JSON object: ${argumentsJson}` };
+		}
+		return { content: `Calling ${name}.`, toolCalls: [toolCall(name, args)] };
+	}
+
 	const match = /calculate\s+(.+)/i.exec(userText);
-	const tool = body.tools?.[0]?.function;
+	const tool = tools.find((t) => /calculator/i.test(t.name)) ?? tools[0];
 	if (match && tool) {
 		const argument = Object.keys(tool.parameters?.properties ?? { input: {} })[0] ?? 'input';
-		sequence += 1;
 		return {
 			content: 'Let me calculate that.',
-			toolCalls: [
-				{
-					id: `call_${sequence}`,
-					type: 'function',
-					function: { name: tool.name, arguments: JSON.stringify({ [argument]: match[1].trim() }) },
-				},
-			],
+			toolCalls: [toolCall(tool.name, { [argument]: match[1].trim() })],
 		};
 	}
 

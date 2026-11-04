@@ -8,6 +8,8 @@ interface Setup {
 	respond?: (options: IHttpRequestOptions, callIndex: number) => unknown;
 	continueOnFail?: boolean;
 	items?: number;
+	/** The node n8n reports; the tool face has a type that ends in `Tool`. */
+	node?: INode;
 }
 
 const NODE: INode = {
@@ -19,6 +21,9 @@ const NODE: INode = {
 	parameters: {},
 };
 
+/** The same node, as the AI Agent runs it: n8n appends `Tool` to the type. */
+const TOOL_NODE: INode = { ...NODE, type: `${NODE.type}Tool` };
+
 const BASE = 'https://memory.example.com/v1/stores/store-1';
 
 function httpError(status: number, message = `Request failed with status code ${status}`) {
@@ -26,10 +31,16 @@ function httpError(status: number, message = `Request failed with status code ${
 }
 
 /** Runs `execute` with fixed parameters for every item and records the HTTP calls. */
-async function run({ parameters, respond = () => ({}), continueOnFail = false, items = 1 }: Setup) {
+async function run({
+	parameters,
+	respond = () => ({}),
+	continueOnFail = false,
+	items = 1,
+	node = NODE,
+}: Setup) {
 	const requests: IHttpRequestOptions[] = [];
 	const ctx = {
-		getNode: () => NODE,
+		getNode: () => node,
 		getInputData: () => Array.from({ length: items }, (_, i) => ({ json: { i } })),
 		getNodeParameter: (name: string, _itemIndex: number, fallback?: unknown) =>
 			name in parameters ? parameters[name] : fallback,
@@ -75,7 +86,6 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				options: {
 					namespaceId: 'ns-1',
 					topics: 'food, travel',
-					filterOp: 'any',
 					similarityThreshold: 0.4,
 				},
 			},
@@ -89,7 +99,6 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			body: {
 				text: 'What food does the user like?',
 				limit: 3,
-				filterOp: 'any',
 				similarityThreshold: 0.4,
 				filter: {
 					ownerId: { eq: 'user-1' },
@@ -101,14 +110,17 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		expect(output.map((m) => m.text)).toEqual(['Likes spicy food', 'Vegetarian']);
 	});
 
-	it('leaves the default filter match and a zero threshold out of the request', async () => {
+	// Older workflows may still carry a Filter Match option. The API applies one
+	// conjunction to every filter, so "any" would OR the User ID away; the node
+	// never sends it.
+	it('ignores a Filter Match left in an older workflow and a zero threshold', async () => {
 		const { requests } = await run({
 			parameters: {
 				resource: 'longTermMemory',
 				operation: 'search',
 				query: 'q',
 				ownerId: 'user-1',
-				options: { filterOp: 'all', similarityThreshold: 0 },
+				options: { filterOp: 'any', similarityThreshold: 0 },
 			},
 			respond: () => ({ items: [] }),
 		});
@@ -120,12 +132,111 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 	});
 
+	it('refuses to pass on a search result that belongs to another user', async () => {
+		const call = run({
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'search',
+				query: 'q',
+				ownerId: 'user-1',
+			},
+			respond: () => ({
+				items: [record('m1', 'Mine'), { ...record('m2', 'Theirs'), ownerId: 'user-2' }],
+			}),
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: expect.stringContaining('user-2'),
+		});
+	});
+
 	it('refuses to search without a user', async () => {
 		await expect(
 			run({
 				parameters: { resource: 'longTermMemory', operation: 'search', query: 'q', ownerId: ' ' },
 			}),
 		).rejects.toThrow("'User ID' is empty");
+	});
+
+	// The editor caps Max Results at 100; an expression bypasses the cap.
+	it.each([500, 0, 2.5, 'ten'])('refuses Max Results of %s before calling the API', async (max) => {
+		const call = run({
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'search',
+				query: 'q',
+				ownerId: 'user-1',
+				maxResults: max,
+			},
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: "'Max Results' must be a whole number from 1 to 100",
+			context: { itemIndex: 0 },
+		});
+	});
+
+	it('as a tool, outputs one item that says nothing matched when a search finds nothing', async () => {
+		const { output } = await run({
+			node: TOOL_NODE,
+			parameters: { resource: 'longTermMemory', operation: 'search', query: 'q', ownerId: 'u' },
+			respond: () => ({ items: [] }),
+		});
+
+		expect(output).toEqual([{ message: 'No memories matched' }]);
+	});
+
+	it('as an action node, outputs no items when a search finds nothing', async () => {
+		const { output } = await run({
+			parameters: { resource: 'longTermMemory', operation: 'search', query: 'q', ownerId: 'u' },
+			respond: () => ({ items: [] }),
+		});
+
+		expect(output).toEqual([]);
+	});
+
+	it('as a tool, outputs one item that says nothing matched when Get Many finds nothing', async () => {
+		const { output } = await run({
+			node: TOOL_NODE,
+			parameters: { resource: 'longTermMemory', operation: 'getAll', filters: { ownerId: 'u' } },
+			respond: () => ({ items: [] }),
+		});
+
+		expect(output).toEqual([{ message: 'No memories matched' }]);
+	});
+
+	it('refuses Get Many without a filter before calling the API', async () => {
+		const call = run({
+			parameters: { resource: 'longTermMemory', operation: 'getAll', filters: { topics: ' , ' } },
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: 'Add at least one filter',
+			description:
+				'The API lists memories only by User ID, Memory Type, Namespace ID, Session ID or Topics',
+			context: { itemIndex: 0 },
+		});
+	});
+
+	it('refuses a Limit below 1 before calling the API', async () => {
+		const call = run({
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'getAll',
+				returnAll: false,
+				limit: 0,
+				filters: { ownerId: 'user-1' },
+			},
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: "'Limit' must be 1 or more",
+			context: { itemIndex: 0 },
+		});
 	});
 
 	it('gets many by following page tokens until the limit', async () => {
@@ -161,7 +272,12 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			{ items: [record('m2', 'b')] },
 		];
 		const { output, requests } = await run({
-			parameters: { resource: 'longTermMemory', operation: 'getAll', returnAll: true, filters: {} },
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'getAll',
+				returnAll: true,
+				filters: { ownerId: 'user-1' },
+			},
 			respond: (_options, call) => pages[call],
 		});
 
@@ -271,6 +387,38 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			}),
 		).rejects.toThrow('Memory "m1" was not deleted');
 	});
+
+	it('refuses an update with no Update Fields before calling the API', async () => {
+		const call = run({
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'update',
+				memoryId: 'm1',
+				updateFields: { text: '  ', topics: ', ' },
+			},
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: "'Update Fields' is empty",
+			description:
+				'Add at least one of Memory Type, Namespace ID, Session ID, Text, Topics or User ID',
+			context: { itemIndex: 0 },
+		});
+	});
+
+	it('tells the user that creating the same Memory ID again replaces the memory', () => {
+		const { properties } = new RedisAgentMemory().description;
+		const additionalFields = properties.find(
+			(property) =>
+				property.name === 'additionalFields' &&
+				property.displayOptions?.show?.operation?.includes('create') &&
+				property.displayOptions?.show?.resource?.includes('longTermMemory'),
+		);
+		const memoryId = additionalFields?.options?.find((option) => option.name === 'id');
+
+		expect(memoryId).toMatchObject({ description: expect.stringContaining('replaces') });
+	});
 });
 
 describe('RedisAgentMemory: Session', () => {
@@ -311,6 +459,16 @@ describe('RedisAgentMemory: Session', () => {
 			qs: { limit: 2, filterOwnerId: 'user-1' },
 		});
 		expect(output).toEqual([{ sessionId: 's1' }, { sessionId: 's2' }]);
+		expect(requests[0].qs).not.toHaveProperty('includeAll');
+	});
+
+	it('lists every session with includeAll when no user is given', async () => {
+		const { requests } = await run({
+			parameters: { resource: 'session', operation: 'getAll', returnAll: true, filters: {} },
+			respond: () => ({ items: ['s1'], total: 1 }),
+		});
+
+		expect(requests[0].qs).toEqual({ limit: 100, includeAll: true });
 	});
 
 	it('adds an event and returns it', async () => {
@@ -340,6 +498,26 @@ describe('RedisAgentMemory: Session', () => {
 			},
 		});
 		expect(output).toEqual([{ eventId: 'e1', role: 'ASSISTANT' }]);
+	});
+
+	it("names 'Created At' when the value is not a date", async () => {
+		const call = run({
+			parameters: {
+				resource: 'session',
+				operation: 'addEvent',
+				sessionId: 's1',
+				actorId: 'user-1',
+				text: 'Hello',
+				additionalFields: { createdAt: 'yesterday' },
+			},
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: `'Created At' is not a date: "yesterday"`,
+			description: 'Use an ISO 8601 timestamp, for example 2024-03-15T10:00:00Z',
+			context: { itemIndex: 0 },
+		});
 	});
 
 	it('deletes a session and a single event', async () => {
@@ -412,7 +590,7 @@ describe('RedisAgentMemory: Namespace', () => {
 				resource: 'namespace',
 				operation: 'update',
 				namespaceId: 'ns-1',
-				updateFields: { state: 'ARCHIVED' },
+				updateFields: { archive: true },
 			},
 			respond: () => ({ namespace: { namespaceId: 'ns-1', state: 'ARCHIVED' } }),
 		});
@@ -423,11 +601,76 @@ describe('RedisAgentMemory: Namespace', () => {
 			body: { state: 'ARCHIVED' },
 		});
 
+		const rename = await run({
+			parameters: {
+				resource: 'namespace',
+				operation: 'update',
+				namespaceId: 'ns-1',
+				updateFields: { name: 'billing', archive: false },
+			},
+			respond: () => ({ namespace: { namespaceId: 'ns-1', name: 'billing' } }),
+		});
+		expect(rename.requests[0].body).toEqual({ name: 'billing' });
+
 		const del = await run({
 			parameters: { resource: 'namespace', operation: 'delete', namespaceId: 'ns-1' },
 			respond: () => undefined,
 		});
 		expect(del.output).toEqual([{ deleted: true, namespaceId: 'ns-1' }]);
+	});
+
+	it('creates a child namespace with only its name and parent', async () => {
+		// The server refuses a child that names a scope or an owner; the child
+		// inherits both from its parent.
+		const { requests } = await run({
+			parameters: {
+				resource: 'namespace',
+				operation: 'create',
+				name: 'child',
+				scope: 'PERSONAL',
+				additionalFields: { parentId: 'ns-parent', ownerId: 'user-1' },
+			},
+			respond: () => ({ namespace: { namespaceId: 'ns-child' } }),
+		});
+
+		expect(requests[0].body).toEqual({ name: 'child', parentId: 'ns-parent' });
+	});
+
+	it('refuses a personal namespace without a User ID before calling the API', async () => {
+		const call = run({
+			parameters: {
+				resource: 'namespace',
+				operation: 'create',
+				name: 'mine',
+				scope: 'PERSONAL',
+				additionalFields: { ownerId: ' ' },
+			},
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: 'A personal namespace needs a User ID',
+			description: 'Set User ID under Additional Fields, or choose the Shared scope',
+			context: { itemIndex: 0 },
+		});
+	});
+
+	it('refuses a namespace update with no Update Fields before calling the API', async () => {
+		const call = run({
+			parameters: {
+				resource: 'namespace',
+				operation: 'update',
+				namespaceId: 'ns-1',
+				updateFields: { name: ' ', archive: false },
+			},
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: "'Update Fields' is empty",
+			description: 'Add a Name, or switch Archive on',
+			context: { itemIndex: 0 },
+		});
 	});
 });
 

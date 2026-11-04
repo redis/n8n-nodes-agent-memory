@@ -1,12 +1,25 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
 import { agentMemoryConfig, runPrefix, skipReason } from '../support/env';
-import { N8N_URL, postJson } from './harness';
+import {
+	ACTION_NODE_WORKFLOW,
+	callWebhookAndWait,
+	executionError,
+	N8N_URL,
+	postJson,
+	type ExecutionError,
+} from './harness';
 
 interface StoredEvent {
 	eventId: string;
 	actorId: string;
 	content: Array<{ text: string }>;
+}
+
+interface Memory {
+	id: string;
+	text: string;
+	ownerId: string;
 }
 
 /**
@@ -30,13 +43,75 @@ async function callAction<T>(path: string, body: object): Promise<T[]> {
 	return Array.isArray(data) ? data : [data];
 }
 
+/**
+ * Posts to a webhook whose run is expected to fail, and returns the error
+ * the editor shows on the node. The webhook itself answers only
+ * `500 Error in workflow`.
+ */
+async function failingAction(path: string, body: object): Promise<ExecutionError> {
+	const { response, execution } = await callWebhookAndWait(ACTION_NODE_WORKFLOW, path, body);
+	expect(response.status, response.body).toBe(500);
+	const error = executionError(execution);
+	if (!error) throw new Error(`The execution of ${path} saved no error`);
+	return error;
+}
+
 describe.skipIf(!agentMemoryConfig)(
 	`Redis Agent Memory action node inside n8n ${skipReason}`,
 	() => {
 		const client = new AgentMemoryTestClient(agentMemoryConfig!);
+		/** Namespaces created here, oldest first; deleted newest first, after the memories. */
+		const namespaceIds: string[] = [];
+
+		/** A user ID inside this run's prefix, registered for cleanup. */
+		function newUser(label: string): string {
+			const userId = `${runPrefix}-action-${label}`;
+			client.track(`${runPrefix}-action-no-session`, userId);
+			return userId;
+		}
+
+		/** Creates memories straight on the store, so a test has data without the node. */
+		async function createMemories(memories: Array<Memory & { topics?: string[] }>): Promise<void> {
+			await client.request({ method: 'POST', path: '/long-term-memory', body: { memories } });
+		}
+
+		async function getMemory(id: string): Promise<Memory | undefined> {
+			return await client.request<Memory>({
+				method: 'GET',
+				path: `/long-term-memory/${encodeURIComponent(id)}`,
+				allowNotFound: true,
+			});
+		}
+
+		/** Creates a namespace straight on the store and registers it for cleanup. */
+		async function createNamespace(label: string): Promise<string> {
+			const created = await client.request<{ namespace: { namespaceId: string } }>({
+				method: 'POST',
+				path: '/namespaces',
+				body: { name: `${runPrefix}-action-${label}`, scope: 'SHARED' },
+			});
+			const namespaceId = created!.namespace.namespaceId;
+			namespaceIds.push(namespaceId);
+			return namespaceId;
+		}
+
+		async function getNamespace(namespaceId: string): Promise<{ name: string; state: string }> {
+			const fetched = await client.request<{ namespace: { name: string; state: string } }>({
+				method: 'GET',
+				path: `/namespaces/${encodeURIComponent(namespaceId)}`,
+			});
+			return fetched!.namespace;
+		}
 
 		afterAll(async () => {
 			await client.cleanup();
+			for (const namespaceId of [...namespaceIds].reverse()) {
+				await client.request({
+					method: 'DELETE',
+					path: `/namespaces/${encodeURIComponent(namespaceId)}`,
+					allowNotFound: true,
+				});
+			}
 		});
 
 		it('trims a session with Delete Event, through the Memory Manager and the action node', async () => {
@@ -103,6 +178,189 @@ describe.skipIf(!agentMemoryConfig)(
 				query: 'Does the user have any allergies?',
 			});
 			expect(afterDelete.map((m) => m.id)).not.toContain(created.id);
+		});
+
+		// Each test here pins a fix to a defect the first end-to-end run of the
+		// node surfaced (docs/testing.md, "How the design was verified"). The webhook answers a
+		// failed run with `500 Error in workflow` only, so the error assertions
+		// read the saved execution: the message, description and status the
+		// editor shows on the red node.
+		describe('fixes verified inside n8n', () => {
+			// The editor showed n8n's generic status text; the server's reason stayed hidden.
+			it('shows the server reason for a missing memory and for a refused session ID', async () => {
+				const missing = await failingAction('e2e-action-memory-get', {
+					memoryId: `${runPrefix}-action-missing`,
+				});
+				expect(missing).toMatchObject({
+					nodeName: 'Action: memory-get',
+					type: 'NodeApiError',
+					httpCode: '404',
+					message: 'The requested memory was not found',
+					description: 'Memory Not Found (HTTP 404)',
+				});
+
+				// Not tracked: the server never creates it.
+				const refused = await failingAction('e2e-action-event-add', {
+					sessionId: `${runPrefix}-action-a b`,
+					userId: newUser('refused-id'),
+					text: 'rejected id',
+				});
+				expect(refused).toMatchObject({
+					nodeName: 'Action: event-add',
+					type: 'NodeApiError',
+					httpCode: '400',
+					message:
+						'SessionID: must contain only alphanumeric characters (A-Z, a-z, 0-9) and hyphens (-).',
+					description: 'Invalid Request (HTTP 400)',
+				});
+			});
+
+			// "Filter Match: Any" put the User ID on a par with the other filters,
+			// so a shared topic leaked another user's memory. The option is gone;
+			// a workflow saved with it still carries `filterOp`, which the node ignores.
+			it("never returns another user's memory, even with a stale Filter Match = Any", async () => {
+				const userId = newUser('filter-user');
+				const otherUserId = newUser('filter-other');
+				const own = `${runPrefix}-action-filter-own`;
+				const theirs = `${runPrefix}-action-filter-theirs`;
+				await createMemories([
+					{ id: own, ownerId: userId, text: 'The user drinks tea', topics: ['drinks'] },
+					{ id: theirs, ownerId: otherUserId, text: 'The user drinks coffee', topics: ['drinks'] },
+				]);
+
+				const found = await callAction<Memory>('e2e-action-memory-search', {
+					userId,
+					query: 'What does the user drink?',
+					filterOp: 'any',
+					topics: 'drinks',
+				});
+
+				expect(found.map((m) => m.id)).toContain(own);
+				expect(found.map((m) => m.id)).not.toContain(theirs);
+				expect(found.every((m) => m.ownerId === userId)).toBe(true);
+			});
+
+			// Create sent scope and owner along with Parent ID, which the server refused.
+			it('nests a namespace under the parent given', async () => {
+				const parentId = await createNamespace('parent');
+				const name = `${runPrefix}-action-child`;
+
+				const [child] = await callAction<{ namespaceId: string; parentId: string; name: string }>(
+					'e2e-action-namespace-create',
+					{ name, parentId },
+				);
+				namespaceIds.push(child.namespaceId);
+
+				expect(child).toMatchObject({ name, parentId });
+			});
+
+			// Get Many with no User ID sent no filter, which the server refused;
+			// it now asks the server for every session.
+			it('lists sessions when Get Many has no User ID', async () => {
+				const sessionId = `${runPrefix}-action-listed`;
+				const userId = newUser('listed');
+				client.track(sessionId, userId);
+				await callAction('e2e-action-event-add', { sessionId, userId, text: 'listed' });
+
+				const sessions = await callAction<{ sessionId: string }>('e2e-action-session-list', {});
+
+				expect(sessions.map((s) => s.sessionId)).toContain(sessionId);
+			});
+
+			// Four requests the server refused with a 400 that named no parameter;
+			// the node now refuses them itself, before any request.
+			it('refuses an empty filter, empty update fields and a personal namespace without a user', async () => {
+				const memoryId = `${runPrefix}-action-unchanged`;
+				await createMemories([{ id: memoryId, ownerId: newUser('unchanged'), text: 'Likes tea' }]);
+				const namespaceId = await createNamespace('unchanged');
+
+				const noFilter = await failingAction('e2e-action-memory-list', {});
+				expect(noFilter).toMatchObject({
+					nodeName: 'Action: memory-list',
+					type: 'NodeOperationError',
+					message: 'Add at least one filter',
+				});
+
+				const emptyMemoryUpdate = await failingAction('e2e-action-memory-update', { memoryId });
+				expect(emptyMemoryUpdate).toMatchObject({
+					nodeName: 'Action: memory-update',
+					type: 'NodeOperationError',
+					message: "'Update Fields' is empty",
+				});
+				expect(await getMemory(memoryId)).toMatchObject({ text: 'Likes tea' });
+
+				const emptyNamespaceUpdate = await failingAction('e2e-action-namespace-update', {
+					namespaceId,
+				});
+				expect(emptyNamespaceUpdate).toMatchObject({
+					nodeName: 'Action: namespace-update',
+					type: 'NodeOperationError',
+					message: "'Update Fields' is empty",
+				});
+				expect(await getNamespace(namespaceId)).toMatchObject({
+					name: `${runPrefix}-action-unchanged`,
+					state: 'ACTIVE',
+				});
+
+				const personal = await failingAction('e2e-action-namespace-create', {
+					name: `${runPrefix}-action-personal`,
+					scope: 'PERSONAL',
+				});
+				expect(personal).toMatchObject({
+					nodeName: 'Action: namespace-create',
+					type: 'NodeOperationError',
+					message: 'A personal namespace needs a User ID',
+				});
+			});
+
+			// A Created At that is not a date became "Invalid Date" on the wire.
+			it("names 'Created At' when its value is not a date", async () => {
+				const sessionId = `${runPrefix}-action-undated`;
+				client.track(sessionId, newUser('undated'));
+
+				const error = await failingAction('e2e-action-event-add', {
+					sessionId,
+					userId: `${runPrefix}-action-undated`,
+					text: 'dated',
+					createdAt: 'yesterday',
+				});
+
+				expect(error).toMatchObject({
+					nodeName: 'Action: event-add',
+					type: 'NodeOperationError',
+					message: `'Created At' is not a date: "yesterday"`,
+				});
+				expect(await client.getSession(sessionId)).toBeUndefined();
+			});
+
+			// Update offered a State dropdown whose values the server ignored.
+			it('archives a namespace with the Archive switch', async () => {
+				const namespaceId = await createNamespace('archive');
+
+				const [updated] = await callAction<{ namespaceId: string; state: string }>(
+					'e2e-action-namespace-update',
+					{ namespaceId, archive: true },
+				);
+
+				expect(updated).toMatchObject({ namespaceId, state: 'ARCHIVED' });
+				expect((await getNamespace(namespaceId)).state).toBe('ARCHIVED');
+			});
+
+			// The editor caps Max Results at 100; an expression bypassed the cap
+			// and the server's 400 named no parameter.
+			it('names Max Results when an expression sets it above 100', async () => {
+				const error = await failingAction('e2e-action-memory-search', {
+					userId: newUser('max-results'),
+					query: 'tea',
+					maxResults: 500,
+				});
+
+				expect(error).toMatchObject({
+					nodeName: 'Action: memory-search',
+					type: 'NodeOperationError',
+					message: "'Max Results' must be a whole number from 1 to 100",
+				});
+			});
 		});
 	},
 );

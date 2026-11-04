@@ -5,8 +5,8 @@
  */
 /* eslint-disable @n8n/community-nodes/no-restricted-globals, no-console */
 import { agentMemoryConfig, skipReason } from '../support/env';
-import { LLM_STUB_URL, N8N_URL } from './harness';
-import { OWNER, startStack, stopStack } from './stack';
+import { LLM_STUB_URL, N8N_URL, OWNER } from './harness';
+import { startStack, stopStack } from './stack';
 
 /**
  * Starts or stops the end-to-end stack for manual testing in a browser.

@@ -25,6 +25,23 @@ describe('RedisAgentMemoryApi credential', () => {
 		});
 	});
 
+	it('names all three fields when the test gets a 403', () => {
+		// The gateway refuses a wrong key, a wrong store and an extra path segment
+		// in the URL the same way; n8n's default for a 403 is the bare word
+		// "Forbidden".
+		const { test } = new RedisAgentMemoryApi();
+
+		expect(test.rules).toEqual([
+			{
+				type: 'responseCode',
+				properties: {
+					value: 403,
+					message: 'Forbidden: check the API Key, Server URL and Store ID',
+				},
+			},
+		]);
+	});
+
 	it('builds the same URL as the nodes: trailing slashes dropped, store ID encoded', () => {
 		// The nodes' request adapter sends /v1/stores/store%2F1/...; the test must too.
 		const { url } = resolveCredentialTest({

@@ -57,6 +57,12 @@ function optional(value: unknown): string | undefined {
 	return text || undefined;
 }
 
+/** The value as a whole number, or undefined when it is not one (an expression may give anything). */
+function wholeNumber(value: unknown): number | undefined {
+	const number = typeof value === 'string' && value.trim() === '' ? NaN : Number(value);
+	return Number.isInteger(number) ? number : undefined;
+}
+
 /** Comma-separated list to an array, or undefined when empty. */
 function splitList(value: unknown): string[] | undefined {
 	const items = (optional(value) ?? '')
@@ -245,6 +251,27 @@ class Operations {
 		return this.context.getNode();
 	}
 
+	/** True when the AI Agent runs the node as a tool; n8n appends `Tool` to the type. */
+	private get runsAsTool(): boolean {
+		return this.node.type.endsWith('Tool');
+	}
+
+	/**
+	 * The memories found, or, as a tool, one item that says nothing matched.
+	 * The Agent turns zero items into the string `""`; one item becomes a JSON
+	 * array the model can read. As an action node no items stay no items,
+	 * n8n's convention ("Always Output Data" exists for the other case).
+	 */
+	private memoriesFound(items: IDataObject[]): IDataObject[] {
+		if (items.length === 0 && this.runsAsTool) return [{ message: 'No memories matched' }];
+		return items;
+	}
+
+	/** An input-check failure: a `NodeOperationError` that points at the current item. */
+	private refuse(message: string, description: string): never {
+		throw new NodeOperationError(this.node, message, { itemIndex: this.itemIndex, description });
+	}
+
 	private param<T>(name: string, fallback?: T): T {
 		return this.context.getNodeParameter(name, this.itemIndex, fallback) as T;
 	}
@@ -264,8 +291,35 @@ class Operations {
 	private paging(): { pageSize: number; max: number | undefined } {
 		const returnAll = this.param<boolean>('returnAll', false);
 		if (returnAll) return { pageSize: MAX_PAGE_SIZE, max: undefined };
-		const limit = this.param<number>('limit', 50);
+		// The editor enforces the minimum; an expression bypasses it.
+		const limit = wholeNumber(this.param<unknown>('limit', 50));
+		if (limit === undefined || limit < 1) {
+			this.refuse("'Limit' must be 1 or more", 'Set Return All to list everything');
+		}
 		return { pageSize: Math.min(limit, MAX_PAGE_SIZE), max: limit };
+	}
+
+	/**
+	 * The User ID is the one search filter the user must never be able to
+	 * loosen. The API applies a single conjunction to every filter field, so a
+	 * "match any" request would OR the owner away and return other users'
+	 * memories. Search therefore sends no `filterOp`, and this check refuses to
+	 * pass on a memory of another user should the store return one anyway.
+	 */
+	private ownedBy(items: IDataObject[], ownerId: string): IDataObject[] {
+		const foreign = items.find((item) => item.ownerId !== undefined && item.ownerId !== ownerId);
+		if (foreign) {
+			throw new NodeOperationError(
+				this.node,
+				`The store returned a memory of user "${String(foreign.ownerId)}" for a search scoped to user "${ownerId}"`,
+				{
+					itemIndex: this.itemIndex,
+					description:
+						'The node did not pass it on. The store did not apply the User ID filter; report this to Redis.',
+				},
+			);
+		}
+		return items;
 	}
 
 	private unknownOperation(resource: string, operation: string): never {
@@ -281,40 +335,49 @@ class Operations {
 			case 'search': {
 				const query = this.required('query', 'Query');
 				const ownerId = this.required('ownerId', 'User ID');
-				const maxResults = this.param<number>('maxResults', 10);
-				const options = this.param<
-					MemoryFields & { filterOp?: string; similarityThreshold?: number }
-				>('options', {});
+				// The editor caps Max Results at 1 to 100; an expression bypasses the cap.
+				const maxResults = wholeNumber(this.param<unknown>('maxResults', 10));
+				if (maxResults === undefined || maxResults < 1 || maxResults > MAX_PAGE_SIZE) {
+					this.refuse(
+						"'Max Results' must be a whole number from 1 to 100",
+						'The API returns at most 100 memories per search',
+					);
+				}
+				// Workflows saved before 0.1.0 may still carry a `filterOp` option
+				// here. It is left out on purpose; see `ownedBy`.
+				const options = this.param<MemoryFields & { similarityThreshold?: number }>('options', {});
 				const body: IDataObject = {
 					text: query,
 					limit: maxResults,
 					filter: memoryFilter({ ...options, ownerId }),
 				};
-				if (options.filterOp && options.filterOp !== 'all') body.filterOp = options.filterOp;
 				if (options.similarityThreshold) body.similarityThreshold = options.similarityThreshold;
 				const page = await this.request<Page<IDataObject>>({
 					method: 'POST',
 					path: '/long-term-memory/search',
 					body,
 				});
-				return page?.items ?? [];
+				return this.memoriesFound(this.ownedBy(page?.items ?? [], ownerId));
 			}
 			case 'getAll': {
-				const filters = this.param<MemoryFields>('filters', {});
+				const filter = memoryFilter(this.param<MemoryFields>('filters', {}));
+				if (Object.keys(filter).length === 0) {
+					this.refuse(
+						'Add at least one filter',
+						'The API lists memories only by User ID, Memory Type, Namespace ID, Session ID or Topics',
+					);
+				}
 				const { pageSize, max } = this.paging();
-				return await collectPages<IDataObject>(
+				const memories = await collectPages<IDataObject>(
 					async (pageToken) =>
 						await this.request<Page<IDataObject>>({
 							method: 'POST',
 							path: '/long-term-memory/search',
-							body: {
-								filter: memoryFilter(filters),
-								limit: pageSize,
-								...(pageToken ? { pageToken } : {}),
-							},
+							body: { filter, limit: pageSize, ...(pageToken ? { pageToken } : {}) },
 						}),
 					max,
 				);
+				return this.memoriesFound(memories);
 			}
 			case 'create': {
 				const text = this.required('text', 'Text');
@@ -341,12 +404,20 @@ class Operations {
 			}
 			case 'update': {
 				const memoryId = this.required('memoryId', 'Memory ID');
-				const updateFields = this.param<MemoryFields>('updateFields', {});
+				const changes = memoryRecordFields(this.param<MemoryFields>('updateFields', {}));
+				if (Object.keys(changes).length === 0) {
+					// n8n's request helper sends no body for `{}`, and the server
+					// refuses a PATCH without one.
+					this.refuse(
+						"'Update Fields' is empty",
+						'Add at least one of Memory Type, Namespace ID, Session ID, Text, Topics or User ID',
+					);
+				}
 				return (
 					(await this.request<IDataObject>({
 						method: 'PATCH',
 						path: `/long-term-memory/${encodeURIComponent(memoryId)}`,
-						body: memoryRecordFields(updateFields),
+						body: changes,
 					})) ?? {}
 				);
 			}
@@ -398,9 +469,10 @@ class Operations {
 						await this.request<Page<string>>({
 							method: 'GET',
 							path: '/session-memory',
+							// The API needs a filter or an explicit `includeAll`.
 							qs: {
 								limit: pageSize,
-								...(ownerId ? { filterOwnerId: ownerId } : {}),
+								...(ownerId ? { filterOwnerId: ownerId } : { includeAll: true }),
 								...(pageToken ? { pageToken } : {}),
 							},
 						}),
@@ -426,6 +498,13 @@ class Operations {
 					{},
 				);
 				const createdAt = optional(additionalFields.createdAt);
+				const createdAtMs = createdAt ? Date.parse(createdAt) : Date.now();
+				if (Number.isNaN(createdAtMs)) {
+					this.refuse(
+						`'Created At' is not a date: "${createdAt}"`,
+						'Use an ISO 8601 timestamp, for example 2024-03-15T10:00:00Z',
+					);
+				}
 				const namespaceId = optional(additionalFields.namespaceId);
 				const result = await this.request<{ event: IDataObject }>({
 					method: 'POST',
@@ -435,7 +514,7 @@ class Operations {
 						actorId,
 						role,
 						content: [{ text }],
-						createdAt: createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
+						createdAt: new Date(createdAtMs).toISOString(),
 						...(namespaceId ? { namespaceRef: { namespaceId } } : {}),
 					},
 				});
@@ -466,15 +545,18 @@ class Operations {
 				);
 				const parentId = optional(additionalFields.parentId);
 				const ownerId = optional(additionalFields.ownerId);
+				if (!parentId && scope === 'PERSONAL' && !ownerId) {
+					this.refuse(
+						'A personal namespace needs a User ID',
+						'Set User ID under Additional Fields, or choose the Shared scope',
+					);
+				}
+				// A child inherits scope and owner from its parent; the server
+				// refuses a child that names either.
 				const created = await this.request<NamespaceResponse>({
 					method: 'POST',
 					path: '/namespaces',
-					body: {
-						name,
-						scope,
-						...(parentId ? { parentId } : {}),
-						...(ownerId ? { ownerId } : {}),
-					},
+					body: parentId ? { name, parentId } : { name, scope, ...(ownerId ? { ownerId } : {}) },
 				});
 				return created?.namespace ?? {};
 			}
@@ -500,15 +582,20 @@ class Operations {
 			}
 			case 'update': {
 				const namespaceId = this.required('namespaceId', 'Namespace ID');
-				const updateFields = this.param<{ name?: string; state?: string }>('updateFields', {});
+				const updateFields = this.param<{ name?: string; archive?: boolean }>('updateFields', {});
 				const name = optional(updateFields.name);
+				// The API only archives; it never makes a namespace active again.
+				const changes: IDataObject = {
+					...(name ? { name } : {}),
+					...(updateFields.archive ? { state: 'ARCHIVED' } : {}),
+				};
+				if (Object.keys(changes).length === 0) {
+					this.refuse("'Update Fields' is empty", 'Add a Name, or switch Archive on');
+				}
 				const updated = await this.request<NamespaceResponse>({
 					method: 'PATCH',
 					path: `/namespaces/${encodeURIComponent(namespaceId)}`,
-					body: {
-						...(name ? { name } : {}),
-						...(updateFields.state ? { state: updateFields.state } : {}),
-					},
+					body: changes,
 				});
 				return updated?.namespace ?? {};
 			}
