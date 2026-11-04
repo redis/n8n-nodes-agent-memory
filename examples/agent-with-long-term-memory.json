@@ -1,0 +1,226 @@
+{
+  "id": "agentMemoryDemo1",
+  "name": "Agent with long-term memory (Redis Agent Memory)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Agent with long-term memory\n\nWhat this shows:\n- **Session memory**: recent turns go back to the model; the server summarizes older ones.\n- **Long-term memory**: facts about the user outlive the session. The memory node recalls them on every turn (*Recall Long-Term Memories* is on), and the agent can search or save them on purpose with the two tools.\n\nTry it:\n1. Select your **Redis Agent Memory API** and **OpenAI** credentials on the three nodes that need them.\n2. Open the chat and say: *I'm vegetarian and I live in Sofia.*\n3. Start a **new** chat (a new session) and ask: *What should I cook tonight?* The answer uses what you said before.\n\n**Identify the user** pins the User ID to `demo-user`. In a real workflow take it from the authenticated trigger (a Telegram or Slack sender ID, a JWT claim), never from the request body: the User ID is what keeps one user's memories away from another.",
+        "height": 520,
+        "width": 440
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "loadPreviousSession": "memory"
+        }
+      },
+      "id": "chat-trigger",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "3f6a2b1c-7d4e-4a9b-9c1d-2e5f8a7b6c01"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user-id",
+              "name": "userId",
+              "value": "demo-user",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "identify-user",
+      "name": "Identify the user",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are a helpful assistant with memory. Lasting facts the user tells you (preferences, where they live, decisions) are worth remembering: save them with the Save memory tool. When a question depends on something the user may have said in an earlier conversation, search with the Search memories tool before answering. Memories recalled for this turn are given to you at the start of the conversation."
+        }
+      },
+      "id": "agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        380,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "sessionId": "={{ $json.sessionId }}",
+        "actorId": "={{ $json.userId }}",
+        "recallLongTermMemories": true,
+        "options": {}
+      },
+      "id": "memory",
+      "name": "Redis Agent Chat Memory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+      "typeVersion": 1,
+      "position": [
+        540,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Search what the user told you in earlier conversations: preferences, facts about them, past decisions. Use it before answering a question that depends on the user's history.",
+        "resource": "longTermMemory",
+        "operation": "search",
+        "query": "={{ $fromAI('query', \"What to look for in the user's memories\", 'string') }}",
+        "ownerId": "={{ $('Identify the user').item.json.userId }}",
+        "maxResults": 5,
+        "options": {}
+      },
+      "id": "search-tool",
+      "name": "Search memories",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryTool",
+      "typeVersion": 1,
+      "position": [
+        700,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Remember a lasting fact about the user right away, in one sentence, such as a preference, where they live, or a decision they made.",
+        "resource": "longTermMemory",
+        "operation": "create",
+        "text": "={{ $fromAI('text', 'The fact to remember, in one sentence', 'string') }}",
+        "ownerId": "={{ $('Identify the user').item.json.userId }}",
+        "additionalFields": {}
+      },
+      "id": "save-tool",
+      "name": "Save memory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryTool",
+      "typeVersion": 1,
+      "position": [
+        860,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Identify the user",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify the user": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Agent Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "When chat message received",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search memories": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save memory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

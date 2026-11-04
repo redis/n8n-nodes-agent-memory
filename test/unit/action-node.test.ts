@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { IExecuteFunctions, IHttpRequestOptions, INode } from 'n8n-workflow';
+import type {
+	IExecuteFunctions,
+	IHttpRequestOptions,
+	ILoadOptionsFunctions,
+	INode,
+} from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 import { RedisAgentMemory } from '../../nodes/RedisAgentMemory/RedisAgentMemory.node';
 
@@ -30,7 +35,12 @@ function httpError(status: number, message = `Request failed with status code ${
 	return Object.assign(new Error(message), { httpCode: String(status), response: { status } });
 }
 
-/** Runs `execute` with fixed parameters for every item and records the HTTP calls. */
+/**
+ * Runs `execute` with fixed parameters for every item and records the HTTP
+ * calls. The stub's `getNodeParameter` ignores the options argument, so a
+ * test gives a Namespace locator as the plain string n8n would extract from
+ * it with `extractValue`, and a missing `simple` falls back to true, as in n8n.
+ */
 async function run({
 	parameters,
 	respond = () => ({}),
@@ -74,6 +84,33 @@ const record = (id: string, text: string) => ({
 	updatedAt: 'x',
 });
 
+/** A memory as the API returns it, with the fields Simplify drops or flattens. */
+const fullRecord = {
+	id: 'm1',
+	text: 'Likes spicy food',
+	ownerId: 'user-1',
+	memoryType: 'semantic',
+	topics: ['food'],
+	namespaceRef: { namespaceId: 'ns-1', name: 'support', path: 'support' },
+	sessionId: 's1',
+	createdAt: '2026-11-04T10:00:00Z',
+	updatedAt: '2026-11-04T10:00:00Z',
+	revision: 1,
+	embedding: [0.1, 0.2],
+};
+
+/** The same memory with Simplify on. */
+const simpleRecord = {
+	id: 'm1',
+	text: 'Likes spicy food',
+	ownerId: 'user-1',
+	memoryType: 'semantic',
+	topics: ['food'],
+	namespaceId: 'ns-1',
+	sessionId: 's1',
+	createdAt: '2026-11-04T10:00:00Z',
+};
+
 describe('RedisAgentMemory: Long-Term Memory', () => {
 	it('searches by meaning, scoped to the user, and returns one item per memory', async () => {
 		const { output, requests } = await run({
@@ -108,6 +145,27 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			},
 		});
 		expect(output.map((m) => m.text)).toEqual(['Likes spicy food', 'Vegetarian']);
+	});
+
+	it('simplifies search results by default and returns the raw records with Simplify off', async () => {
+		const search = {
+			resource: 'longTermMemory',
+			operation: 'search',
+			query: 'q',
+			ownerId: 'user-1',
+		};
+
+		const simplified = await run({
+			parameters: search,
+			respond: () => ({ items: [fullRecord] }),
+		});
+		expect(simplified.output).toEqual([simpleRecord]);
+
+		const raw = await run({
+			parameters: { ...search, simple: false },
+			respond: () => ({ items: [fullRecord] }),
+		});
+		expect(raw.output).toEqual([fullRecord]);
 	});
 
 	// Older workflows may still carry a Filter Match option. The API applies one
@@ -303,14 +361,42 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		const [memory] = (requests[0].body as { memories: Array<Record<string, unknown>> }).memories;
 		expect(requests[0]).toMatchObject({ method: 'POST', url: `${BASE}/long-term-memory` });
 		expect(memory.id).toMatch(/^n8n-[a-z0-9]+-[a-z0-9]+$/);
-		expect(memory).toMatchObject({
+		expect(memory).toEqual({
+			id: memory.id,
 			text: 'The user is vegetarian',
 			ownerId: 'user-1',
 			memoryType: 'preference',
 			topics: ['food'],
 			namespaceRef: { namespaceId: 'ns-1' },
 		});
+		// Create echoes its request body through the same mapper as Get, so the
+		// two agree: `namespaceRef` becomes `namespaceId`, and there is no `createdAt`.
+		expect(output[0]).toEqual({
+			id: memory.id,
+			text: 'The user is vegetarian',
+			ownerId: 'user-1',
+			memoryType: 'preference',
+			topics: ['food'],
+			namespaceId: 'ns-1',
+		});
+	});
+
+	it('returns the request body as sent from Create with Simplify off', async () => {
+		const { output, requests } = await run({
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'create',
+				text: 'x',
+				ownerId: 'user-1',
+				simple: false,
+				additionalFields: { id: 'mem-1', namespaceId: 'ns-1' },
+			},
+			respond: () => ({ created: ['mem-1'] }),
+		});
+
+		const [memory] = (requests[0].body as { memories: Array<Record<string, unknown>> }).memories;
 		expect(output[0]).toEqual(memory);
+		expect(output[0]).toMatchObject({ namespaceRef: { namespaceId: 'ns-1' } });
 	});
 
 	it('uses the given memory ID and reports a per-record error', async () => {
@@ -331,10 +417,16 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 	it('gets, updates, deletes and moves one memory by ID', async () => {
 		const get = await run({
 			parameters: { resource: 'longTermMemory', operation: 'get', memoryId: 'm 1' },
-			respond: () => record('m 1', 'a'),
+			respond: () => fullRecord,
 		});
 		expect(get.requests[0]).toMatchObject({ method: 'GET', url: `${BASE}/long-term-memory/m%201` });
-		expect(get.output[0].text).toBe('a');
+		expect(get.output).toEqual([simpleRecord]);
+
+		const rawGet = await run({
+			parameters: { resource: 'longTermMemory', operation: 'get', memoryId: 'm1', simple: false },
+			respond: () => fullRecord,
+		});
+		expect(rawGet.output).toEqual([fullRecord]);
 
 		const update = await run({
 			parameters: {
@@ -343,13 +435,14 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				memoryId: 'm1',
 				updateFields: { text: 'b', topics: 'x, y', ownerId: 'user-2' },
 			},
-			respond: () => record('m1', 'b'),
+			respond: () => ({ ...fullRecord, text: 'b' }),
 		});
 		expect(update.requests[0]).toMatchObject({
 			method: 'PATCH',
 			url: `${BASE}/long-term-memory/m1`,
 			body: { text: 'b', topics: ['x', 'y'], ownerId: 'user-2' },
 		});
+		expect(update.output).toEqual([{ ...simpleRecord, text: 'b' }]);
 
 		const del = await run({
 			parameters: { resource: 'longTermMemory', operation: 'delete', memoryId: 'm1' },
@@ -362,6 +455,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 		expect(del.output).toEqual([{ deleted: true, id: 'm1' }]);
 
+		// `namespaceId` is a Namespace locator; the stub hands over its extracted value.
 		const move = await run({
 			parameters: {
 				resource: 'longTermMemory',
@@ -421,6 +515,32 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 	});
 });
 
+/** A session as the API returns it: content parts, a summary object and a namespace binding. */
+const fullSession = {
+	sessionId: 's1',
+	ownerId: 'user-1',
+	namespaceRef: { namespaceId: 'ns-1', name: 'support', path: 'support' },
+	namespaceScope: 'SHARED',
+	summary: {
+		text: 'The user likes tea.',
+		summarizedUpToEventId: 'e0',
+		summarizedEvents: 12,
+		createdAt: 'x',
+		updatedAt: 'x',
+	},
+	events: [
+		{
+			eventId: 'e1',
+			actorId: 'user-1',
+			sessionId: 's1',
+			role: 'USER',
+			content: [{ text: 'Hello' }, { text: 'again' }],
+			createdAt: '2026-11-04T10:00:00Z',
+			systemTimestamp: '2026-11-04T10:00:01Z',
+		},
+	],
+};
+
 describe('RedisAgentMemory: Session', () => {
 	it('gets a session, with summarized events on request', async () => {
 		const { output, requests } = await run({
@@ -438,7 +558,47 @@ describe('RedisAgentMemory: Session', () => {
 			url: `${BASE}/session-memory/s%2F1`,
 			qs: { includeSummarisedEvents: true },
 		});
-		expect(output[0]).toMatchObject({ ownerId: 'user-1' });
+		expect(output[0]).toEqual({ sessionId: 's/1', ownerId: 'user-1', events: [] });
+	});
+
+	it('simplifies a session to its summary text and one text per event', async () => {
+		const simplified = await run({
+			parameters: { resource: 'session', operation: 'get', sessionId: 's1' },
+			respond: () => fullSession,
+		});
+		expect(simplified.output).toEqual([
+			{
+				sessionId: 's1',
+				ownerId: 'user-1',
+				namespaceId: 'ns-1',
+				summary: 'The user likes tea.',
+				events: [
+					{
+						eventId: 'e1',
+						actorId: 'user-1',
+						role: 'USER',
+						text: 'Hello\nagain',
+						createdAt: '2026-11-04T10:00:00Z',
+					},
+				],
+			},
+		]);
+
+		const raw = await run({
+			parameters: { resource: 'session', operation: 'get', sessionId: 's1', simple: false },
+			respond: () => fullSession,
+		});
+		expect(raw.output).toEqual([fullSession]);
+	});
+
+	it('leaves the summary out of a simplified session that has none', async () => {
+		const { output } = await run({
+			parameters: { resource: 'session', operation: 'get', sessionId: 's1' },
+			respond: () => ({ sessionId: 's1', ownerId: 'user-1', events: [] }),
+		});
+
+		expect(output[0]).not.toHaveProperty('summary');
+		expect(output[0]).not.toHaveProperty('namespaceId');
 	});
 
 	it('lists session IDs for a user as one item each', async () => {
@@ -548,7 +708,54 @@ describe('RedisAgentMemory: Session', () => {
 	});
 });
 
+/** A namespace as the API returns it, with the bookkeeping fields Simplify drops. */
+const fullNamespace = {
+	namespaceId: 'ns-1',
+	name: 'support',
+	path: 'support',
+	rootId: 'ns-1',
+	scope: 'PERSONAL',
+	state: 'ACTIVE',
+	ownerId: 'user-1',
+	revision: 1,
+	createdAt: '2026-11-04T07:07:02.601Z',
+	updatedAt: '2026-11-04T07:07:02.601Z',
+};
+
+/** The same namespace with Simplify on. */
+const simpleNamespace = {
+	namespaceId: 'ns-1',
+	name: 'support',
+	scope: 'PERSONAL',
+	state: 'ACTIVE',
+	ownerId: 'user-1',
+};
+
 describe('RedisAgentMemory: Namespace', () => {
+	it('simplifies a namespace by default and returns the raw record with Simplify off', async () => {
+		// `namespaceId` is a Namespace locator; the stub hands over its extracted value.
+		const get = { resource: 'namespace', operation: 'get', namespaceId: 'ns-1' };
+
+		const simplified = await run({
+			parameters: get,
+			respond: () => ({ namespace: fullNamespace }),
+		});
+		expect(simplified.output).toEqual([simpleNamespace]);
+
+		const raw = await run({
+			parameters: { ...get, simple: false },
+			respond: () => ({ namespace: fullNamespace }),
+		});
+		expect(raw.output).toEqual([fullNamespace]);
+
+		const child = await run({
+			parameters: get,
+			respond: () => ({ namespace: { ...fullNamespace, parentId: 'ns-0', ownerId: undefined } }),
+		});
+		expect(child.output).toEqual([{ ...simpleNamespace, parentId: 'ns-0', ownerId: undefined }]);
+		expect(child.output[0]).not.toHaveProperty('ownerId');
+	});
+
 	it('creates, gets, lists, updates and deletes namespaces', async () => {
 		const create = await run({
 			parameters: {
@@ -576,14 +783,14 @@ describe('RedisAgentMemory: Namespace', () => {
 
 		const list = await run({
 			parameters: { resource: 'namespace', operation: 'getAll', returnAll: true },
-			respond: () => ({ items: [{ namespaceId: 'ns-1' }, { namespaceId: 'ns-2' }] }),
+			respond: () => ({ items: [fullNamespace, { ...fullNamespace, namespaceId: 'ns-2' }] }),
 		});
 		expect(list.requests[0]).toMatchObject({
 			method: 'GET',
 			url: `${BASE}/namespaces`,
 			qs: { limit: 100 },
 		});
-		expect(list.output.map((n) => n.namespaceId)).toEqual(['ns-1', 'ns-2']);
+		expect(list.output).toEqual([simpleNamespace, { ...simpleNamespace, namespaceId: 'ns-2' }]);
 
 		const update = await run({
 			parameters: {
@@ -671,6 +878,134 @@ describe('RedisAgentMemory: Namespace', () => {
 			description: 'Add a Name, or switch Archive on',
 			context: { itemIndex: 0 },
 		});
+	});
+});
+
+describe('RedisAgentMemory: Namespace locator', () => {
+	it('offers the namespaces of Get, Update, Delete and Move from a list or as an ID', () => {
+		const { properties } = new RedisAgentMemory().description;
+		const locators = properties.filter(
+			(property) => property.name === 'namespaceId' && property.type === 'resourceLocator',
+		);
+
+		expect(locators.map((p) => p.displayOptions?.show)).toEqual([
+			{ resource: ['longTermMemory'], operation: ['move'] },
+			{ resource: ['namespace'], operation: ['get', 'update', 'delete'] },
+		]);
+		for (const locator of locators) {
+			expect(locator).toMatchObject({
+				displayName: 'Namespace',
+				required: true,
+				default: { mode: 'list', value: '' },
+				modes: [
+					{
+						name: 'list',
+						type: 'list',
+						typeOptions: { searchListMethod: 'searchNamespaces', searchable: true },
+					},
+					{ name: 'id', type: 'string' },
+				],
+			});
+			// No `__regex` or `extractValue`: the server's ID format may change.
+			expect(locator.modes?.every((mode) => !mode.validation && !mode.extractValue)).toBe(true);
+		}
+	});
+
+	/** Calls the list-search method with a fake `ILoadOptionsFunctions` and records the calls. */
+	async function search(
+		pages: Array<{ items: Array<{ namespaceId: string; name: string }>; nextPageToken?: string }>,
+		filter?: string,
+		paginationToken?: string,
+	) {
+		const requests: IHttpRequestOptions[] = [];
+		const ctx = {
+			getNode: () => NODE,
+			getCredentials: async () => ({
+				serverUrl: 'https://memory.example.com',
+				storeId: 'store-1',
+				apiKey: 'secret',
+			}),
+			helpers: {
+				async httpRequestWithAuthentication(_credentialType: string, options: IHttpRequestOptions) {
+					requests.push(options);
+					const index = pages.findIndex(
+						(_, i) => (i === 0 ? undefined : `p${i}`) === options.qs?.pageToken,
+					);
+					return pages[index];
+				},
+			},
+		} as unknown as ILoadOptionsFunctions;
+		const { searchNamespaces } = new RedisAgentMemory().methods.listSearch;
+		const result = await searchNamespaces.call(ctx, filter, paginationToken);
+		return { result, requests };
+	}
+
+	const namespace = (n: number) => ({ namespaceId: `id-${n}`, name: `Namespace ${n}` });
+
+	it('lists one page of namespaces with the token for the next', async () => {
+		const { result, requests } = await search([
+			{ items: [namespace(1), namespace(2)], nextPageToken: 'p1' },
+			{ items: [namespace(3)] },
+		]);
+
+		expect(requests).toHaveLength(1);
+		expect(requests[0]).toMatchObject({
+			method: 'GET',
+			url: `${BASE}/namespaces`,
+			qs: { limit: 100 },
+		});
+		expect(result).toEqual({
+			results: [
+				{ name: 'Namespace 1', value: 'id-1' },
+				{ name: 'Namespace 2', value: 'id-2' },
+			],
+			paginationToken: 'p1',
+		});
+	});
+
+	it('continues from the pagination token and ends without one on the last page', async () => {
+		const { result, requests } = await search(
+			[{ items: [namespace(1)], nextPageToken: 'p1' }, { items: [namespace(3)] }],
+			undefined,
+			'p1',
+		);
+
+		expect(requests[0].qs).toEqual({ limit: 100, pageToken: 'p1' });
+		expect(result).toEqual({ results: [{ name: 'Namespace 3', value: 'id-3' }] });
+	});
+
+	it('matches a filter against the name, in any case, across pages', async () => {
+		const { result, requests } = await search(
+			[
+				{ items: [namespace(1), { namespaceId: 'id-s', name: 'Support' }], nextPageToken: 'p1' },
+				{
+					items: [{ namespaceId: 'id-b', name: 'billing-support' }, namespace(2)],
+					nextPageToken: 'p2',
+				},
+				{ items: [namespace(3)] },
+			],
+			'SUPP',
+		);
+
+		expect(requests.map((r) => r.qs?.pageToken)).toEqual([undefined, 'p1', 'p2']);
+		expect(result).toEqual({
+			results: [
+				{ name: 'Support', value: 'id-s' },
+				{ name: 'billing-support', value: 'id-b' },
+			],
+		});
+	});
+
+	it('stops a filtered search after ten pages and hands back the token', async () => {
+		const pages = Array.from({ length: 12 }, (_, i) => ({
+			items: [namespace(i)],
+			nextPageToken: `p${i + 1}`,
+		}));
+
+		const { result, requests } = await search(pages, 'no such name');
+
+		expect(requests).toHaveLength(10);
+		expect(result).toEqual({ results: [], paginationToken: 'p10' });
 	});
 });
 

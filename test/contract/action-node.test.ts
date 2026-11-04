@@ -16,6 +16,9 @@ const NODE: INode = {
 /**
  * Runs the action node's `execute` with the given parameters against the
  * hosted service: the n8n context is a stub, but the HTTP helper is real.
+ * The stub returns the fallback for a missing parameter, so `simple` is true
+ * unless a test sets it, and a Namespace locator is given as the plain string
+ * n8n would extract from it.
  */
 async function run(parameters: Record<string, unknown>): Promise<IDataObject[]> {
 	const config = agentMemoryConfig!;
@@ -87,7 +90,17 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 		namespaceIds.push(namespaceId);
 
 		const [fetched] = await run({ resource: 'namespace', operation: 'get', namespaceId });
-		expect(fetched).toMatchObject({ namespaceId, name });
+		expect(fetched).toEqual({ namespaceId, name, scope: 'SHARED', state: 'ACTIVE' });
+
+		const [raw] = await run({
+			resource: 'namespace',
+			operation: 'get',
+			namespaceId,
+			simple: false,
+		});
+		expect(raw).toMatchObject({ namespaceId, name, scope: 'SHARED', state: 'ACTIVE' });
+		expect(raw).toHaveProperty('createdAt');
+		expect(raw).toHaveProperty('path');
 
 		const listed = await run({ resource: 'namespace', operation: 'getAll', returnAll: true });
 		expect(listed.map((n) => n.namespaceId)).toContain(namespaceId);
@@ -120,7 +133,8 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 			additionalFields: { topics: 'food, preferences' },
 		});
 		const memoryId = created.id as string;
-		expect(created).toMatchObject({
+		expect(created).toEqual({
+			id: memoryId,
 			text: 'The user is vegetarian',
 			ownerId,
 			topics: ['food', 'preferences'],
@@ -128,6 +142,8 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 
 		const [fetched] = await run({ resource: 'longTermMemory', operation: 'get', memoryId });
 		expect(fetched).toMatchObject({ id: memoryId, text: 'The user is vegetarian', ownerId });
+		expect(fetched).toHaveProperty('createdAt');
+		expect(fetched).not.toHaveProperty('updatedAt');
 
 		const found = await run({
 			resource: 'longTermMemory',
@@ -182,7 +198,15 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 		});
 		expect(moved).toEqual({ moved: true, id: memoryId, namespaceId });
 		const [afterMove] = await run({ resource: 'longTermMemory', operation: 'get', memoryId });
-		expect(JSON.stringify(afterMove)).toContain(namespaceId);
+		expect(afterMove.namespaceId).toBe(namespaceId);
+		const [rawAfterMove] = await run({
+			resource: 'longTermMemory',
+			operation: 'get',
+			memoryId,
+			simple: false,
+		});
+		expect(rawAfterMove).toMatchObject({ namespaceRef: { namespaceId } });
+		expect(rawAfterMove).not.toHaveProperty('namespaceId');
 
 		const [deleted] = await run({ resource: 'longTermMemory', operation: 'delete', memoryId });
 		expect(deleted).toEqual({ deleted: true, id: memoryId });
@@ -219,9 +243,34 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 
 		const [session] = await run({ resource: 'session', operation: 'get', sessionId, options: {} });
 		expect(session.ownerId).toBe(actorId);
-		expect((session.events as Array<{ eventId: string }>).map((e) => e.eventId)).toEqual([
-			first.eventId,
-			second.eventId,
+		expect(session).not.toHaveProperty('summary');
+		expect(session.events).toEqual([
+			{
+				eventId: first.eventId,
+				actorId,
+				role: 'USER',
+				text: 'Hello',
+				createdAt: expect.any(String),
+			},
+			{
+				eventId: second.eventId,
+				actorId,
+				role: 'ASSISTANT',
+				text: 'Hi there',
+				createdAt: expect.any(String),
+			},
+		]);
+
+		const [rawSession] = await run({
+			resource: 'session',
+			operation: 'get',
+			sessionId,
+			simple: false,
+			options: {},
+		});
+		expect((rawSession.events as Array<{ content: unknown }>).map((e) => e.content)).toEqual([
+			[{ text: 'Hello' }],
+			[{ text: 'Hi there' }],
 		]);
 
 		const listed = await run({

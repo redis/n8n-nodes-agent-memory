@@ -1,8 +1,10 @@
 import type {
 	IDataObject,
 	IExecuteFunctions,
+	ILoadOptionsFunctions,
 	INode,
 	INodeExecutionData,
+	INodeListSearchResult,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -22,6 +24,12 @@ import { sessionFields, sessionOperations } from './descriptions/SessionDescript
 /** Largest page the search endpoint serves. */
 const MAX_PAGE_SIZE = 100;
 
+/**
+ * How many pages the namespace list search reads for one filter string. The
+ * API has no name search, so the node matches names itself.
+ */
+const MAX_SEARCH_PAGES = 10;
+
 interface Page<T> {
 	items: T[];
 	nextPageToken?: string;
@@ -30,6 +38,13 @@ interface Page<T> {
 /** The namespace endpoints wrap their record. */
 interface NamespaceResponse {
 	namespace: IDataObject;
+}
+
+/** A session as `GET /session-memory/{id}` returns it, as far as Simplify reads it. */
+interface SessionResponse extends IDataObject {
+	events?: Array<IDataObject & { content?: Array<{ text?: string }> }>;
+	summary?: { text?: string };
+	namespaceRef?: { namespaceId?: string };
 }
 
 /** Response of the bulk create, delete and move endpoints. */
@@ -106,6 +121,63 @@ function memoryRecordFields(fields: MemoryFields): IDataObject {
 	return record;
 }
 
+/** The object without the keys whose value is undefined. */
+function compact(record: Record<string, unknown>): IDataObject {
+	return Object.fromEntries(
+		Object.entries(record).filter(([, value]) => value !== undefined),
+	) as IDataObject;
+}
+
+/**
+ * The fields of a memory most workflows read, flat: `namespaceRef` becomes
+ * `namespaceId`. Create's echo of its request body maps the same way, so
+ * Create and Get agree.
+ */
+function simplifyMemory(memory: IDataObject): IDataObject {
+	const namespaceRef = memory.namespaceRef as { namespaceId?: string } | undefined;
+	return compact({
+		id: memory.id,
+		text: memory.text,
+		ownerId: memory.ownerId,
+		memoryType: memory.memoryType,
+		topics: memory.topics,
+		namespaceId: namespaceRef?.namespaceId,
+		sessionId: memory.sessionId,
+		createdAt: memory.createdAt,
+	});
+}
+
+/** The fields of a namespace most workflows read. */
+function simplifyNamespace(namespace: IDataObject): IDataObject {
+	return compact({
+		namespaceId: namespace.namespaceId,
+		name: namespace.name,
+		scope: namespace.scope,
+		state: namespace.state,
+		parentId: namespace.parentId,
+		ownerId: namespace.ownerId,
+	});
+}
+
+/** A session with the summary text and one line of text per event. */
+function simplifySession(session: SessionResponse): IDataObject {
+	return compact({
+		sessionId: session.sessionId,
+		ownerId: session.ownerId,
+		namespaceId: session.namespaceRef?.namespaceId,
+		summary: session.summary?.text,
+		events: (session.events ?? []).map((event) =>
+			compact({
+				eventId: event.eventId,
+				actorId: event.actorId,
+				role: event.role,
+				text: (event.content ?? []).map((part) => part.text ?? '').join('\n'),
+				createdAt: event.createdAt,
+			}),
+		),
+	});
+}
+
 /** An ID the API accepts (letters, digits and dashes) that is unique enough for one store. */
 function generateMemoryId(): string {
 	return `n8n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -143,7 +215,7 @@ function assertBulkApplied(
 	if (!result?.[key]?.includes(id)) {
 		throw new NodeOperationError(node, `Memory "${id}" was not ${key}`, {
 			itemIndex,
-			description: 'The server did not report an error, but the ID is missing from its response',
+			description: 'The server accepted the request, but its response does not list the ID',
 		});
 	}
 }
@@ -195,6 +267,12 @@ export class RedisAgentMemory implements INodeType {
 		],
 	};
 
+	methods = {
+		listSearch: {
+			searchNamespaces,
+		},
+	};
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
@@ -239,6 +317,37 @@ async function runItem(
 	throw new NodeOperationError(context.getNode(), `Unknown resource "${resource}"`, { itemIndex });
 }
 
+/**
+ * The store's namespaces for the Namespace locator's "From List" mode, one
+ * page at a time. With a filter string, it reads up to `MAX_SEARCH_PAGES`
+ * pages and keeps the namespaces whose name contains the string, in any case.
+ */
+async function searchNamespaces(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+	paginationToken?: string,
+): Promise<INodeListSearchResult> {
+	const request = await createAgentMemoryRequest(this, 0);
+	const needle = (filter ?? '').trim().toLowerCase();
+	const results: INodeListSearchResult['results'] = [];
+	let pageToken = paginationToken;
+	for (let pages = 0; pages < (needle ? MAX_SEARCH_PAGES : 1); pages++) {
+		const page = await request<Page<IDataObject>>({
+			method: 'GET',
+			path: '/namespaces',
+			qs: { limit: MAX_PAGE_SIZE, ...(pageToken ? { pageToken } : {}) },
+		});
+		for (const namespace of page?.items ?? []) {
+			const name = String(namespace.name ?? namespace.namespaceId ?? '');
+			if (needle && !name.toLowerCase().includes(needle)) continue;
+			results.push({ name, value: String(namespace.namespaceId) });
+		}
+		pageToken = page?.nextPageToken;
+		if (!pageToken) break;
+	}
+	return { results, ...(pageToken ? { paginationToken: pageToken } : {}) };
+}
+
 /** The operations for one input item. Errors from the API arrive as `NodeApiError`s from `request`. */
 class Operations {
 	constructor(
@@ -276,9 +385,36 @@ class Operations {
 		return this.context.getNodeParameter(name, this.itemIndex, fallback) as T;
 	}
 
-	/** A required string parameter, trimmed. Fails with the parameter's display name when empty. */
+	/** The Simplify switch; on for operations that have none. */
+	private get simple(): boolean {
+		return this.param<boolean>('simple', true);
+	}
+
+	/** The memories as Simplify wants them. */
+	private memories(items: IDataObject[]): IDataObject[] {
+		return this.simple ? items.map(simplifyMemory) : items;
+	}
+
+	/** One memory as Simplify wants it. */
+	private memory(record: IDataObject | undefined): IDataObject {
+		return this.memories([record ?? {}])[0];
+	}
+
+	/** The namespace as Simplify wants it. */
+	private namespaceRecord(response: NamespaceResponse | undefined): IDataObject {
+		const namespace = response?.namespace ?? {};
+		return this.simple ? simplifyNamespace(namespace) : namespace;
+	}
+
+	/**
+	 * A required string parameter, trimmed. Fails with the parameter's display
+	 * name when empty. `extractValue` turns a resource locator into its value;
+	 * for a plain string parameter n8n returns the string as it is.
+	 */
 	private required(name: string, displayName: string): string {
-		const value = optional(this.param<unknown>(name, ''));
+		const value = optional(
+			this.context.getNodeParameter(name, this.itemIndex, '', { extractValue: true }),
+		);
 		if (!value) {
 			throw new NodeOperationError(this.node, `'${displayName}' is empty`, {
 				itemIndex: this.itemIndex,
@@ -357,7 +493,7 @@ class Operations {
 					path: '/long-term-memory/search',
 					body,
 				});
-				return this.memoriesFound(this.ownedBy(page?.items ?? [], ownerId));
+				return this.memoriesFound(this.memories(this.ownedBy(page?.items ?? [], ownerId)));
 			}
 			case 'getAll': {
 				const filter = memoryFilter(this.param<MemoryFields>('filters', {}));
@@ -377,7 +513,7 @@ class Operations {
 						}),
 					max,
 				);
-				return this.memoriesFound(memories);
+				return this.memoriesFound(this.memories(memories));
 			}
 			case 'create': {
 				const text = this.required('text', 'Text');
@@ -391,16 +527,15 @@ class Operations {
 					body: { memories: [memory] },
 				});
 				assertBulkApplied(this.node, this.itemIndex, result, 'created', id);
-				return memory;
+				return this.memory(memory);
 			}
 			case 'get': {
 				const memoryId = this.required('memoryId', 'Memory ID');
-				return (
-					(await this.request<IDataObject>({
-						method: 'GET',
-						path: `/long-term-memory/${encodeURIComponent(memoryId)}`,
-					})) ?? {}
-				);
+				const memory = await this.request<IDataObject>({
+					method: 'GET',
+					path: `/long-term-memory/${encodeURIComponent(memoryId)}`,
+				});
+				return this.memory(memory);
 			}
 			case 'update': {
 				const memoryId = this.required('memoryId', 'Memory ID');
@@ -413,13 +548,12 @@ class Operations {
 						'Add at least one of Memory Type, Namespace ID, Session ID, Text, Topics or User ID',
 					);
 				}
-				return (
-					(await this.request<IDataObject>({
-						method: 'PATCH',
-						path: `/long-term-memory/${encodeURIComponent(memoryId)}`,
-						body: changes,
-					})) ?? {}
-				);
+				const updated = await this.request<IDataObject>({
+					method: 'PATCH',
+					path: `/long-term-memory/${encodeURIComponent(memoryId)}`,
+					body: changes,
+				});
+				return this.memory(updated);
 			}
 			case 'delete': {
 				const memoryId = this.required('memoryId', 'Memory ID');
@@ -433,7 +567,7 @@ class Operations {
 			}
 			case 'move': {
 				const memoryId = this.required('memoryId', 'Memory ID');
-				const namespaceId = this.required('namespaceId', 'Namespace ID');
+				const namespaceId = this.required('namespaceId', 'Namespace');
 				const result = await this.request<BulkResult>({
 					method: 'POST',
 					path: '/long-term-memory/move',
@@ -452,13 +586,12 @@ class Operations {
 			case 'get': {
 				const sessionId = this.required('sessionId', 'Session ID');
 				const options = this.param<{ includeSummarisedEvents?: boolean }>('options', {});
-				return (
-					(await this.request<IDataObject>({
-						method: 'GET',
-						path: `/session-memory/${encodeURIComponent(sessionId)}`,
-						...(options.includeSummarisedEvents ? { qs: { includeSummarisedEvents: true } } : {}),
-					})) ?? {}
-				);
+				const session = await this.request<SessionResponse>({
+					method: 'GET',
+					path: `/session-memory/${encodeURIComponent(sessionId)}`,
+					...(options.includeSummarisedEvents ? { qs: { includeSummarisedEvents: true } } : {}),
+				});
+				return this.simple ? simplifySession(session ?? {}) : (session ?? {});
 			}
 			case 'getAll': {
 				const filters = this.param<{ ownerId?: string }>('filters', {});
@@ -558,19 +691,19 @@ class Operations {
 					path: '/namespaces',
 					body: parentId ? { name, parentId } : { name, scope, ...(ownerId ? { ownerId } : {}) },
 				});
-				return created?.namespace ?? {};
+				return this.namespaceRecord(created);
 			}
 			case 'get': {
-				const namespaceId = this.required('namespaceId', 'Namespace ID');
+				const namespaceId = this.required('namespaceId', 'Namespace');
 				const fetched = await this.request<NamespaceResponse>({
 					method: 'GET',
 					path: `/namespaces/${encodeURIComponent(namespaceId)}`,
 				});
-				return fetched?.namespace ?? {};
+				return this.namespaceRecord(fetched);
 			}
 			case 'getAll': {
 				const { pageSize, max } = this.paging();
-				return await collectPages<IDataObject>(
+				const namespaces = await collectPages<IDataObject>(
 					async (pageToken) =>
 						await this.request<Page<IDataObject>>({
 							method: 'GET',
@@ -579,9 +712,10 @@ class Operations {
 						}),
 					max,
 				);
+				return this.simple ? namespaces.map(simplifyNamespace) : namespaces;
 			}
 			case 'update': {
-				const namespaceId = this.required('namespaceId', 'Namespace ID');
+				const namespaceId = this.required('namespaceId', 'Namespace');
 				const updateFields = this.param<{ name?: string; archive?: boolean }>('updateFields', {});
 				const name = optional(updateFields.name);
 				// The API only archives; it never makes a namespace active again.
@@ -597,10 +731,10 @@ class Operations {
 					path: `/namespaces/${encodeURIComponent(namespaceId)}`,
 					body: changes,
 				});
-				return updated?.namespace ?? {};
+				return this.namespaceRecord(updated);
 			}
 			case 'delete': {
-				const namespaceId = this.required('namespaceId', 'Namespace ID');
+				const namespaceId = this.required('namespaceId', 'Namespace');
 				await this.request({
 					method: 'DELETE',
 					path: `/namespaces/${encodeURIComponent(namespaceId)}`,

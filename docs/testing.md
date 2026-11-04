@@ -86,8 +86,10 @@ second turn that sees the first, a turn with a tool call, loading a previous
 session without the summary, and history that survives an n8n restart. They
 also read the stored events straight from the Agent Memory API.
 [`test/e2e/action-node.test.ts`](../test/e2e/action-node.test.ts) drives the
-action node through webhooks. Both files end with a group of tests that pin
-the fixes from the design verification below, one per fix.
+action node through webhooks, and asks n8n's own REST endpoint for the
+Namespace locator's list, which runs the node's `searchNamespaces` with the
+credential. Both files end with a group of tests that pin the fixes from the
+design verification below, one per fix.
 
 Two small helpers serve those tests. `harness.ts` can log in to n8n as the
 preset owner and read the saved execution of a webhook call, so a test can
