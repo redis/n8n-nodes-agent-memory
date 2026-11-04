@@ -298,12 +298,10 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory Tool in an AI Agent ${sk
 			expect(turn.answer).toBe(`The answer is ${turn.toolResult}.`);
 		});
 
-		// Today the node outputs no item for an empty search, and the Agent turns
-		// zero items into the JSON string `""`: the model gets `""` and answers
-		// `The answer is "".`, having learnt nothing. Wanted: a JSON array like
-		// every other result, which means the tool must output one item when it
-		// found nothing.
-		it.fails('tells the model that nothing matched', async () => {
+		// The Agent turns zero output items into the JSON string `""`, so as a
+		// tool the node outputs one item on a miss; the model then gets a JSON
+		// array like every other result.
+		it('tells the model that nothing matched', async () => {
 			const sessionId = newSession('search-miss');
 			const emptyOwner = `${runPrefix}-tool-empty-owner`;
 			client.track(sessionId, emptyOwner);
@@ -319,8 +317,8 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory Tool in an AI Agent ${sk
 
 				expect(turn.response.status).toBe(200);
 				expect(nodeRuns(turn.execution, 'Search memories')[0]?.executionStatus).toBe('success');
-				expect(turn.toolResult).not.toBe('""');
-				expect(Array.isArray(JSON.parse(turn.toolResult!))).toBe(true);
+				expect(toolResultItems(turn)).toEqual([{ message: 'No memories matched' }]);
+				expect(turn.answer).toBe(`The answer is ${turn.toolResult}.`);
 			} finally {
 				await deleteWorkflow(lonely.id);
 			}

@@ -3,6 +3,7 @@ import type { INode, ISupplyDataFunctions, JsonObject } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 import {
 	createAgentMemoryRequest,
+	GATEWAY_FORBIDDEN_DESCRIPTION,
 	NOT_FOUND_ERROR_TYPE,
 } from '../../nodes/shared/agentMemoryRequest';
 
@@ -163,6 +164,50 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
 			httpCode: '404',
 			message: 'The resource you are requesting could not be found',
+		});
+	});
+
+	/**
+	 * The gateway in front of the hosted store answers a wrong key, a wrong
+	 * store and an extra path segment in the URL alike: a 403 with an HTML
+	 * page. n8n's own text names only the credentials, so the description
+	 * points at all three fields.
+	 */
+	it('tells the user to check the URL and store too for a gateway 403', async () => {
+		const request = await requestThatThrows(
+			httpError(403, '<html><body><h1>403 Forbidden</h1></body></html>'),
+		);
+
+		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+			httpCode: '403',
+			message: 'Forbidden - perhaps check your credentials?',
+			description: GATEWAY_FORBIDDEN_DESCRIPTION,
+		});
+	});
+
+	it('tells the user to check the URL and store too for a gateway 403 with no body', async () => {
+		const request = await requestThatThrows(httpError(403));
+
+		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+			httpCode: '403',
+			description: GATEWAY_FORBIDDEN_DESCRIPTION,
+		});
+	});
+
+	it("quotes the API's Problem Details for a 403 that carries them", async () => {
+		const request = await requestThatThrows(
+			httpError(403, {
+				type: '/errors/forbidden',
+				title: 'Forbidden',
+				status: 403,
+				detail: 'The key cannot write to this store',
+			}),
+		);
+
+		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+			httpCode: '403',
+			message: 'The key cannot write to this store',
+			description: 'Forbidden (HTTP 403)',
 		});
 	});
 

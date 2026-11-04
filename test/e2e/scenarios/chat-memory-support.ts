@@ -34,6 +34,11 @@ export const SUMMARY_HEADER = 'Summary of the earlier conversation:';
 export interface MemoryNodeParameters {
 	sessionId: string;
 	actorId: string;
+	/** The recall switch; the two fields below apply only when it is on. */
+	recallLongTermMemories?: boolean | string;
+	/** Defaults to `{{ $json.chatInput }}` in the node when left out. */
+	recallQuery?: string;
+	recallLimit?: number | string;
 	options?: Record<string, unknown>;
 }
 

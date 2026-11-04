@@ -424,7 +424,9 @@ Ranked by impact. "Pinned by" names the `it.fails` test, or the passing test tha
 
 ## 9. Suggested fixes
 
-Ordered to match the findings. Each names the file and the pinned test that will flip from `it.fails` to `it` when it lands. Fixes 1 and 2 were applied on 2026-11-04 (see their **Status** lines); the rest are open.
+Ordered to match the findings. Each names the file and the pinned test that flipped from `it.fails` to `it` when it landed. All fixes except 11 were applied on 2026-11-04 (see the **Status** lines); fix 11 needs a change in `@n8n/ai-utilities` and stays pinned.
+
+Every applied fix was verified the same way: its unit tests were written first and run (failing), the fix applied, the unit tests run again (passing); its e2e pins were flipped and run against the stack still holding the previous build (failing, with the old values recorded), the stack rebuilt, and the whole suite run (passing). Final run on 2026-11-04 after fixes 3–17: unit 106/106, contract 15 passed (1 opt-in skipped), e2e 10/10, scenarios 180 passed and 1 expected failure (fix 11). Lint, type check and Prettier clean.
 
 **Fix 1 — surface the server's Problem Details (F1, helps F14).**
 
@@ -452,13 +454,23 @@ In `RedisAgentMemory.node.ts`, `search`: do not let `filterOp` apply to `ownerId
 
 **Fix 3 — make recall work with the switch alone (F3).** Preferred: move `recallLongTermMemories`, `recallQuery` and `recallLimit` out of the Options collection to top-level properties, with `displayOptions: { show: { recallLongTermMemories: [true] } }` on the query and the limit. Top-level defaults are always evaluated, so `={{ $json.chatInput }}` applies the moment the switch is on, and the two fields appear only when relevant. Cheaper alternative inside `supplyData`: when `options.recallQuery` is `undefined`, fall back to `String(this.evaluateExpression('{{ $json.chatInput ?? "" }}', itemIndex) ?? '')`. Update the README row. Flips `recalls with the chat input when only the switch is on`.
 
+_Status: applied 2026-11-04._ Recall parameters moved out of Options to top-level properties (`recallLongTermMemories`; `recallQuery` and `recallLimit` shown only when it is on, query default `={{ $json.chatInput }}`). Settings left under Options by an older workflow are ignored. Unit: 2 tests. E2E: flipped `recalls with the chat input when only the switch is on`, deleted its sibling pin; every payload-driven recall test failed against the old build (which read Options only) and passes now. README rows updated.
+
 **Fix 4 — omit scope and owner for child namespaces (F4).** In `namespace` → `create`: when `parentId` is set, send `{ name, parentId }` only. Change the Scope description to "Ignored when Parent ID is set: a child inherits its parent's scope." Flips `nests a namespace under the parent given` and `surfaces the API's not-found for a parent that does not exist`; retire `surfaces the server's 400 when Parent ID is given`.
+
+_Status: applied 2026-11-04._ Child create sends `{ name, parentId }`; Scope and Parent ID descriptions say the child inherits. Unit: 1 test. E2E: flipped `nests a namespace under the parent given` and `surfaces the API's not-found for a parent that does not exist`; retired the pin of the old 400.
 
 **Fix 5 — list all sessions when no user is given (F5).** In `session` → `getAll`: add `includeAll: true` to `qs` when `ownerId` is empty. Flips `lists sessions without a filter`. (Optionally add a Namespace ID filter here too: the server accepts `namespaceRef`.)
 
+_Status: applied 2026-11-04._ `includeAll: true` when User ID is empty, never together with `filterOwnerId`. Unit: 1 test. E2E: flipped `lists sessions without a filter`.
+
 **Fix 6 — refuse empty filters and empty updates with a clear message (F6, F7).** In `longTermMemory` → `getAll`: if `memoryFilter(filters)` is empty, throw `NodeOperationError("Add at least one filter", { description: 'The API needs a User ID, Memory Type, Namespace ID, Session ID or Topics filter to list memories' })`. In both `update` operations: if the record/body is empty, throw `"'Update Fields' is empty"` with a description. These replace server 400s with messages that name the parameter. Flips the two `tells the user that an update needs at least one field` tests; the Get Many `it.fails` should then be rewritten to assert the clear message instead (the server gives no wildcard).
 
+_Status: applied 2026-11-04._ Four node-side refusals, all `NodeOperationError` with `itemIndex` and a description: `Add at least one filter` (Long-Term Memory → Get Many), `'Update Fields' is empty` (memory and namespace Update), `A personal namespace needs a User ID` (skipped when Parent ID is set, since a child ignores scope). Unit: 4 tests. E2E: each server-400 pin and its `it.fails` sibling became one test of the refusal; all four failed against the old build.
+
 **Fix 7 — validate Created At (F8).** In `session` → `addEvent`:
+
+_Status: applied 2026-11-04._ `Date.parse` check: `'Created At' is not a date: "<value>"` with an ISO 8601 hint. Unit: 1 test. E2E: flipped `names 'Created At' in the error for a value that is not a date`.
 
 ```ts
 const parsed = createdAt ? Date.parse(createdAt) : Date.now();
@@ -474,17 +486,31 @@ Flips `names 'Created At' in the error for a value that is not a date`.
 
 **Fix 8 — replace the State dropdown (F9).** In `NamespaceDescription.ts`, replace Update Fields → State with a boolean `archive` ("Archive", description: "Archiving cannot be undone through the API"), and send `state: 'ARCHIVED'` only when true. Adjust the operation's description ("Rename or archive a namespace" already says this).
 
+_Status: applied 2026-11-04._ State dropdown replaced by an `archive` boolean; `state: 'ARCHIVED'` is sent only when it is on. Unit: CRUD test updated. E2E: `archives a namespace` sends `archive: true` (failed on the old build, which ignored the key); the reactivate pin retired.
+
 **Fix 9 — clamp or validate limits that arrive from expressions (F10).** In `search` and `paging()`: if `maxResults`/`limit` is not an integer between 1 and 100, throw `NodeOperationError("'Max Results' must be between 1 and 100")` (or clamp and say so in the description). Flips `names Max Results when an expression sets it above 100`.
+
+_Status: applied 2026-11-04._ `'Max Results' must be a whole number from 1 to 100` and `'Limit' must be 1 or more`, checked before the request (numeric strings accepted, blanks, floats and words refused). Unit: 5 cases. E2E: the two Max Results tests became one refusal test.
 
 **Fix 10 — fold the hint into the message on the sub-node (F11).** In `RedisAgentMemoryChatMemory.node.ts`, n8n shows only the message for a sub-node error, so make it carry the hint: `"'User ID' is empty. Set the ID of the user this conversation belongs to."` (and the same for Session ID). Flips the two `shows the … hint` tests.
 
+_Status: applied 2026-11-04._ Hint folded into the message (`'User ID' is empty. Set the ID of the user this conversation belongs to.`; same for Session ID), description kept. Unit: 4 cases. E2E: flipped both `shows the … hint` tests; the siblings assert the new text as the wrapper's description.
+
 **Fix 11 — Simplify Output strings (F12).** The conversion from `Message.content` parts to LangChain messages is in `@n8n/ai-node-sdk`. Report it upstream with the observed shape; if a local fix is wanted, check whether the SDK accepts a string `content` for text-only messages and, if so, emit one in `getSession()`.
+
+_Not fixable in the node._ `@n8n/ai-utilities` 0.35.4 types `Message.content` as `MessageContent[]` and `toLcMessage` maps it with `.map`, so a string would fail to compile and to run. Upstream ask: pass a string `content` to the LangChain constructor when every block is text, as n8n's own memories do (`fromLcContent` already accepts a string). Pin kept.
 
 **Fix 12 — validate the window (F13).** In `supplyData`: `const windowSize = Number(options.windowSize); use Number.isInteger(windowSize) && windowSize >= 1 ? windowSize : DEFAULT_WINDOW_SIZE` and, for a value that is present but not a positive integer, throw `"'Context Window Length' must be a whole number of 1 or more"`. Pin with a unit test; the e2e test `sends every turn, without an error, when the window resolves to…` then changes to expect the error.
 
+_Status: applied 2026-11-04._ Absent, `''`, `null` or `undefined` → default 50; anything else must be an integer ≥ 1, else `'Context Window Length' must be a whole number of 1 or more` with the resolved value in the description. Unit: 8 cases. E2E: the `it.each` split into `""` → every turn and `0`/`"abc"` → the run fails on the memory node (both failed against the old build: 200 and no error).
+
 **Fix 13 — say "replaces" (F15).** Memory ID description: "Creating the same ID again replaces the memory's text, type and topics."
 
+_Status: applied 2026-11-04._ Description now says `Creating the same ID again replaces the memory's text, type and topics.` Unit: 1 test reads the node description.
+
 **Fix 14 — tell apart the gateway 403 (F16).** In `agentMemoryRequest.ts`, when `httpCode` is 403 and the body is not JSON, set the description to "The gateway refused the request. Check the API Key, and also the Server URL and Store ID: a wrong store or an extra path segment is refused the same way." In the credential, add a rule so the test says the same:
+
+_Status: applied 2026-11-04._ Non-Problem-Details 403 gets the description `The gateway refused the request. Check the API Key, and also the Server URL and Store ID: a wrong store or an extra path segment is refused the same way.`; the credential test has a `responseCode` rule for 403 with `Forbidden: check the API Key, Server URL and Store ID`, which n8n returns verbatim. Unit: 4 tests. E2E: four assertions in `credential-conditions.test.ts` flipped; the before run showed the old values.
 
 ```ts
 rules: [{ type: 'responseCode', properties: { value: 403, message: 'Forbidden: check the API Key, Server URL and Store ID' } }]
@@ -492,9 +518,15 @@ rules: [{ type: 'responseCode', properties: { value: 403, message: 'Forbidden: c
 
 **Fix 15 — document Delete Last N fully (F17).** README, "Chat Memory Manager" paragraph: add that the kept turns are re-inserted with new event IDs under the deleting user, who also becomes the session's owner.
 
+_Status: applied 2026-11-04._ README sentence added to the Chat Memory Manager paragraph. No test.
+
 **Fix 16 — make the owner check an n8n error (F18).** Give `AgentMemoryChatHistoryOptions` a `node: INode` (and `itemIndex`) from `supplyData`, and throw `new NodeOperationError(node, message, { itemIndex, description })` instead of the plain `SessionOwnerMismatchError` (keep the class name in `message` or as a `cause` if the tests rely on it). Flips `shows the owner mismatch on the memory sub-node`.
 
+_Status: applied 2026-11-04._ `SessionOwnerMismatchError` replaced by a `NodeOperationError` built with the node and `itemIndex` that `supplyData` passes into the history (optional in the options type, because the contract test builds the history without a node; a follow-up can make them required). Unit: 2 tests. E2E: flipped `shows the owner mismatch on the memory sub-node`; after the rebuild n8n attributes the error to the memory node under the Manager too.
+
 **Fix 17 — give the model something on a miss (F19).** When the node runs as a tool (`this.getNode().type.endsWith('Tool')`) and `search`/`getAll` return no items, output one item such as `{ memories: [], message: 'No memories matched' }`; the Agent then sends the model a JSON array it can read. The action-node face keeps "no items" (n8n's convention, and `alwaysOutputData` exists). Flips `tells the model that nothing matched`.
+
+_Status: applied 2026-11-04._ As a tool (`node.type` ends in `Tool`), Long-Term Memory → Search and Get Many output `[{ message: 'No memories matched' }]` on a miss; the action face still outputs no items. Session and Namespace → Get Many as tools still return `""` on an empty list (same two-line change if wanted). Unit: 3 tests. E2E: flipped `tells the model that nothing matched`.
 
 ## 10. Before committing the suite
 

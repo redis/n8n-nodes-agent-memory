@@ -1,4 +1,6 @@
 import { BaseChatHistory, BaseChatMemory, type Message } from '@n8n/ai-node-sdk';
+import type { INode } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
 import type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
 
 export type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
@@ -68,6 +70,14 @@ export interface AgentMemoryChatHistoryOptions {
 	 * to a different user than `actorId`. Leave off for shared sessions.
 	 */
 	verifyOwner?: boolean;
+	/**
+	 * The node this history serves and the item it runs for. An owner
+	 * mismatch is then an n8n error on that node and item, so n8n reports it
+	 * there whichever node called the history. Without a node it is a plain
+	 * `Error` with the same message.
+	 */
+	node?: INode;
+	itemIndex?: number;
 	request: AgentMemoryRequest;
 }
 
@@ -77,19 +87,19 @@ export interface AgentMemorySession {
 	messages: Message[];
 }
 
-/** Thrown when `verifyOwner` is on and the session's owner is not the configured user. */
-export class SessionOwnerMismatchError extends Error {
-	constructor(
-		readonly sessionId: string,
-		readonly ownerId: string,
-		readonly actorId: string,
-	) {
-		super(
-			`Session "${sessionId}" belongs to user "${ownerId}", not to the configured User ID "${actorId}". ` +
-				'Use a session ID derived from the user, or turn off "Verify Session Owner" for shared sessions.',
-		);
-		this.name = 'SessionOwnerMismatchError';
-	}
+/** The error for a session whose owner on the server is not the configured user. */
+function sessionOwnerMismatch(options: AgentMemoryChatHistoryOptions, ownerId: string): Error {
+	const { sessionId, actorId, node, itemIndex } = options;
+	const message =
+		`Session "${sessionId}" belongs to user "${ownerId}", not to the configured User ID "${actorId}". ` +
+		'Use a session ID derived from the user, or turn off "Verify Session Owner" for shared sessions.';
+	if (!node) return new Error(message);
+	return new NodeOperationError(node, message, {
+		itemIndex,
+		description:
+			'The server names the first user who writes to a session its owner. ' +
+			'Shared sessions, such as group chats, need "Verify Session Owner" off.',
+	});
 }
 
 const toAgentMemoryRole: Partial<Record<Message['role'], AgentMemoryRole>> = {
@@ -156,9 +166,9 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 	}
 
 	private assertOwner(session: AgentMemorySessionResponse): void {
-		const { verifyOwner, sessionId, actorId } = this.options;
+		const { verifyOwner, actorId } = this.options;
 		if (verifyOwner && session.ownerId && session.ownerId !== actorId) {
-			throw new SessionOwnerMismatchError(sessionId, session.ownerId, actorId);
+			throw sessionOwnerMismatch(this.options, session.ownerId);
 		}
 		this.ownerChecked = true;
 	}

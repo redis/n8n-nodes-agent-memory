@@ -63,5 +63,17 @@ export class RedisAgentMemoryApi implements ICredentialType {
 			url: '=/v1/stores/{{encodeURIComponent($credentials.storeId)}}/health',
 			method: 'GET',
 		},
+		rules: [
+			{
+				// The gateway refuses a wrong key, a wrong store and an extra path
+				// segment in the URL alike; n8n's default for a 403 is the bare
+				// word "Forbidden".
+				type: 'responseCode',
+				properties: {
+					value: 403,
+					message: 'Forbidden: check the API Key, Server URL and Store ID',
+				},
+			},
+		],
 	};
 }

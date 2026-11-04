@@ -19,6 +19,15 @@ export const NOT_FOUND_ERROR_TYPE = '/errors/resource-not-found';
 /** Prefix of every `type` in the API's Problem Details bodies (RFC 9457). */
 const PROBLEM_TYPE_PREFIX = '/errors/';
 
+/**
+ * Description for a 403 that does not come from the API. The gateway in front
+ * of the hosted store refuses a wrong key, a wrong store and an extra path
+ * segment in the URL alike, with an HTML page; n8n's own text names only the
+ * credentials.
+ */
+export const GATEWAY_FORBIDDEN_DESCRIPTION =
+	'The gateway refused the request. Check the API Key, and also the Server URL and Store ID: a wrong store or an extra path segment is refused the same way.';
+
 export interface AgentMemoryRequestOptions {
 	method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
 	/** Path below `/v1/stores/{storeId}`, starting with a slash. */
@@ -73,6 +82,9 @@ export async function createAgentMemoryRequest(
 			const problem = problemDetails(apiError);
 			if (allowNotFound && isResourceNotFound(apiError, problem)) return undefined;
 			if (problem) describeProblem(apiError, problem);
+			else if (String(apiError.httpCode) === '403') {
+				apiError.description = GATEWAY_FORBIDDEN_DESCRIPTION;
+			}
 			throw apiError;
 		}
 	};

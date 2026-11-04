@@ -56,7 +56,7 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 	let plainAgent: CreatedWorkflow;
 	/** Recall on with an explicit Recall Query, and the action node attached as a tool. */
 	let toolAgent: CreatedWorkflow;
-	/** Only the "Recall Long-Term Memories" switch added to Options, as a user would. */
+	/** Only the "Recall Long-Term Memories" switch on, nothing else set, as a user would. */
 	let toggleOnlyAgent: CreatedWorkflow;
 	/** Webhook → Chat Memory Manager insert, to seed history without the model. */
 	let seed: CreatedWorkflow;
@@ -102,13 +102,13 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 				memory: {
 					sessionId: '={{ $json.sessionId }}',
 					actorId: '={{ $json.userId ?? ("user-" + $json.sessionId) }}',
+					recallLongTermMemories: '={{ $json.recall ?? false }}',
+					recallQuery: '={{ $json.recallQuery ?? $json.chatInput }}',
+					recallLimit: '={{ $json.recallLimit ?? 5 }}',
 					options: {
 						windowSize: '={{ $json.windowSize ?? 50 }}',
 						includeSummary: '={{ $json.includeSummary ?? true }}',
 						namespaceId: '={{ $json.namespaceId ?? "" }}',
-						recallLongTermMemories: '={{ $json.recall ?? false }}',
-						recallQuery: '={{ $json.recallQuery ?? $json.chatInput }}',
-						recallLimit: '={{ $json.recallLimit ?? 5 }}',
 						verifyOwner: '={{ $json.verifyOwner ?? false }}',
 					},
 				},
@@ -130,7 +130,9 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 				memory: {
 					sessionId: '={{ $json.sessionId }}',
 					actorId: "={{ 'user-' + $json.sessionId }}",
-					options: { recallLongTermMemories: true, recallQuery: '={{ $json.chatInput }}' },
+					recallLongTermMemories: true,
+					recallQuery: '={{ $json.chatInput }}',
+					options: {},
 				},
 				tools: [
 					{
@@ -156,7 +158,8 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 				memory: {
 					sessionId: '={{ $json.sessionId }}',
 					actorId: "={{ 'user-' + $json.sessionId }}",
-					options: { recallLongTermMemories: true },
+					recallLongTermMemories: true,
+					options: {},
 				},
 			}),
 		);
@@ -248,23 +251,35 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 			]);
 		});
 
-		// An expression that resolves to 0, '' or text is not nullish, so the
-		// node's `?? 50` does not apply and `slice(-value * 2)` becomes
-		// `slice(0)`: the window is off, with no error. Below 50 turns this
-		// looks like the default; above it, it sends more than the default
-		// would. Pinned here as it is; see the findings in the report.
-		it.each([[0], [''], ['abc']])(
-			'sends every turn, without an error, when the window resolves to %j',
-			async (windowSize) => {
-				const session = newSession('window-odd');
-				await seedTurns(seed.webhooks['seed'], session, threeTurns);
-				const chatInput = `question 4 ${session.sessionId}`;
+		// An empty value from an expression means the default, like an absent option.
+		it('sends every turn, without an error, when the window resolves to ""', async () => {
+			const session = newSession('window-empty');
+			await seedTurns(seed.webhooks['seed'], session, threeTurns);
+			const chatInput = `question 4 ${session.sessionId}`;
 
-				await turn({ ...session, chatInput, windowSize });
+			await turn({ ...session, chatInput, windowSize: '' });
 
-				expect(await historySentToModel(session.sessionId, chatInput)).toHaveLength(6);
-			},
-		);
+			expect(await historySentToModel(session.sessionId, chatInput)).toHaveLength(6);
+		});
+
+		// Anything else that is not a whole number of 1 or more is refused
+		// before the node touches the store, instead of turning the window off.
+		it.each([[0], ['abc']])('fails the run when the window resolves to %j', async (windowSize) => {
+			const session = newSession('window-bad');
+			const chatInput = `question 1 ${session.sessionId}`;
+
+			const { response, error } = await failingTurn({ ...session, chatInput, windowSize });
+
+			expect(response.status).toBe(500);
+			expect(error).toMatchObject({
+				nodeName: 'Redis Agent Chat Memory',
+				type: 'NodeOperationError',
+				message: 'Error in sub-node Redis Agent Chat Memory',
+				description: "'Context Window Length' must be a whole number of 1 or more",
+				itemIndex: 0,
+			});
+			expect(await client.getSession(session.sessionId)).toBeUndefined();
+		});
 	});
 
 	// A fresh session has no server summary: the server writes one in the
@@ -493,25 +508,10 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 			]);
 		});
 
-		// In the editor, a user who switches on "Recall Long-Term Memories" and
-		// adds nothing else has no `recallQuery` in the Options collection. The
-		// node then reads `undefined`, treats it as a blank query and skips the
-		// search: recall is on but does nothing, with no warning. The README
-		// promises the default `{{ $json.chatInput }}`. Pinned as it is here;
-		// the wanted behaviour is the next test.
-		it('does no recall when only the switch is on and no Recall Query was added', async () => {
-			const session = newSession('recall-switch-only');
-			await createMemories(client, [
-				{ id: `${session.userId}-m1`, ownerId: session.userId, text: 'The user is vegetarian' },
-			]);
-			const chatInput = `what do I eat ${session.sessionId}`;
-
-			await turn({ ...session, chatInput }, toggleOnlyAgent);
-
-			expect(recallBullets(await historySentToModel(session.sessionId, chatInput))).toBeUndefined();
-		});
-
-		it.fails('recalls with the chat input when only the switch is on', async () => {
+		// The switch and its two fields are top-level parameters, so the Recall
+		// Query's default `{{ $json.chatInput }}` applies the moment the switch
+		// is on, with nothing else to add.
+		it('recalls with the chat input when only the switch is on', async () => {
 			const session = newSession('recall-switch-only-wanted');
 			await createMemories(client, [
 				{ id: `${session.userId}-m1`, ownerId: session.userId, text: 'The user is vegetarian' },
@@ -625,7 +625,8 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 	describe('IDs and strings', () => {
 		// n8n wraps an error thrown by supplyData: the editor shows
 		// "Error in sub-node <name>" as the message and the node's message as
-		// the description. The node's own description (the hint) is dropped.
+		// the description. The node's own description is dropped, so the
+		// node's message carries the hint itself.
 		it('fails the run when the User ID is empty', async () => {
 			const { sessionId } = newSession('empty-user');
 
@@ -640,15 +641,13 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 				nodeName: 'Redis Agent Chat Memory',
 				type: 'NodeOperationError',
 				message: 'Error in sub-node Redis Agent Chat Memory',
-				description: "'User ID' is empty",
+				description: "'User ID' is empty. Set the ID of the user this conversation belongs to.",
 				itemIndex: 0,
 			});
 			expect(await client.getSession(sessionId)).toBeUndefined();
 		});
 
-		// Wanted: the hint the node attaches reaches the user. Today n8n's
-		// wrapper keeps only the message (see above).
-		it.fails('shows the User ID hint when the User ID is empty', async () => {
+		it('shows the User ID hint when the User ID is empty', async () => {
 			const { sessionId } = newSession('empty-user-hint');
 
 			const { error } = await failingTurn({
@@ -675,12 +674,13 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Chat Memory on an AI Agent ${sk
 				nodeName: 'Redis Agent Chat Memory',
 				type: 'NodeOperationError',
 				message: 'Error in sub-node Redis Agent Chat Memory',
-				description: "'Session ID' is empty",
+				description:
+					"'Session ID' is empty. Set a session ID, for example from the chat trigger output.",
 				itemIndex: 0,
 			});
 		});
 
-		it.fails('shows the Session ID hint when the Session ID is empty', async () => {
+		it('shows the Session ID hint when the Session ID is empty', async () => {
 			const { error } = await failingTurn({
 				sessionId: '',
 				chatInput: `hello ${runPrefix}-empty-session-hint`,

@@ -7,6 +7,7 @@ import {
 	type CreatedWorkflow,
 	type ExecutionError,
 } from '../n8n-api';
+import { GATEWAY_FORBIDDEN_DESCRIPTION } from '../../../nodes/shared/agentMemoryRequest';
 import { NOT_FOUND_BODY, pairsWorkflow, runPair, type PairSpec } from './action-node-support';
 
 /**
@@ -156,15 +157,15 @@ describe.skipIf(!agentMemoryConfig || !credentialTests)(
 
 		/**
 		 * The gateway answers a wrong URL, a wrong key and a wrong store alike: a
-		 * 403 HTML page. n8n keeps no body for it (`context.data` is undefined),
-		 * so the user sees the same two lines in all three cases, which name only
-		 * the credentials.
+		 * 403 HTML page. n8n keeps no body for it (`context.data` is undefined)
+		 * and its own text names only the credentials, so the node's description
+		 * points at all three fields.
 		 */
 		const GATEWAY_FORBIDDEN = {
 			type: 'NodeApiError',
 			httpCode: '403',
 			message: 'Forbidden - perhaps check your credentials?',
-			description: 'Request failed with status code 403',
+			description: GATEWAY_FORBIDDEN_DESCRIPTION,
 			data: undefined,
 		};
 
@@ -229,14 +230,17 @@ describe.skipIf(!agentMemoryConfig || !credentialTests)(
 				expect(result).toEqual({ status: 'OK', message: 'Connection successful!' });
 			});
 
-			// The editor shows the gateway's status text and nothing more.
-			it('fails for a wrong API key with the bare word "Forbidden"', async (ctx) => {
+			// The credential's `responseCode` rule replaces n8n's bare "Forbidden".
+			it('fails for a wrong API key naming the API Key, Server URL and Store ID', async (ctx) => {
 				if (blocked) ctx.skip();
 
 				const { status, result } = await testCredential('wrongKey');
 
 				expect(status).toBe(200);
-				expect(result).toEqual({ status: 'Error', message: 'Forbidden' });
+				expect(result).toEqual({
+					status: 'Error',
+					message: 'Forbidden: check the API Key, Server URL and Store ID',
+				});
 			});
 		});
 	},

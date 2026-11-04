@@ -293,20 +293,24 @@ describe.skipIf(!agentMemoryConfig)(`Long-Term Memory records inside n8n ${skipR
 	});
 
 	describe('String data through Create and Get', () => {
+		// Each case carries a short slug for its owner ID: the server allows at
+		// most 64 characters, and the prefix already takes a good part of them.
 		it.each([
 			[
 				'emoji, CJK, right-to-left text and combining marks',
+				'unicode',
 				'Likes 🍵 and 日本茶; name: محمد; café (e\u0301)',
 			],
-			['line breaks, including CRLF', 'First line\r\nSecond line\nThird line'],
+			['line breaks, including CRLF', 'crlf', 'First line\r\nSecond line\nThird line'],
 			// No trailing space: the node trims the ends, which the trim test covers.
-			['an 8 KB text', 'The user likes tea. '.repeat(410).trim()],
+			['an 8 KB text', 'large', 'The user likes tea. '.repeat(410).trim()],
 			[
 				'quotes, backslashes, markup and JSON',
+				'quotes',
 				`He said "it's C:\\temp" <script>alert(1)</script> {"key": [1, 2, {"nested": true}]}`,
 			],
-		])('keeps %s exactly', async (name, text) => {
-			const userId = store.owner(`text-${name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`);
+		])('keeps %s exactly', async (_name, slug, text) => {
+			const userId = store.owner(`text-${slug}`);
 
 			const created = await createThroughNode({ userId, text });
 			const { items, error } = await runPair(workflow, 'Get', { memoryId: created.id });
@@ -493,41 +497,28 @@ describe.skipIf(!agentMemoryConfig)(`Long-Term Memory records inside n8n ${skipR
 			expect(await idsOwnedBy(oldOwner)).toEqual([]);
 		});
 
-		it('with no Update Fields fails with a 400 from the server', async () => {
-			// The node builds an empty body `{}`; n8n's HTTP helper sends no body
-			// at all for an empty object, and the server refuses the request. A
-			// direct PATCH with a literal `{}` is a 200 no-op, so the user sees a
-			// server error for what is a missing node parameter.
+		it('with no Update Fields asks for a field before calling the API', async () => {
+			// An empty body would reach the server as no body at all, and the
+			// server would answer 400 without naming the parameter. The node
+			// checks first and leaves the record alone.
 			const id = await seed('update-nothing');
 
-			const { error } = await runPair(workflow, 'Update nothing', { memoryId: id });
-
-			expect(error).toMatchObject({
-				...INVALID,
-				nodeName: 'Update nothing',
-				itemIndex: 0,
-				message: 'Request body is required but was empty or missing.',
+			const { response, items, error } = await runPair(workflow, 'Update nothing', {
+				memoryId: id,
 			});
-			expect(error?.context?.data).toMatchObject({
-				type: '/errors/invalid-data',
-				detail: 'Request body is required but was empty or missing.',
+
+			expect(response.status).toBe(500);
+			expect(items).toEqual([]);
+			expect(error).toMatchObject({
+				nodeName: 'Update nothing',
+				type: 'NodeOperationError',
+				message: "'Update Fields' is empty",
+				description:
+					'Add at least one of Memory Type, Namespace ID, Session ID, Text, Topics or User ID',
+				itemIndex: 0,
 			});
 			expect(await store.get(id)).toMatchObject({ text: 'The user likes tea' });
 		});
-
-		it.fails(
-			'with no Update Fields tells the user to add a field, or returns the record unchanged',
-			async () => {
-				// Today: NodeApiError 400 "Request body is required but was empty or missing.".
-				const id = await seed('update-nothing-wanted');
-
-				const { error, items } = await runPair(workflow, 'Update nothing', { memoryId: id });
-
-				expect(error?.type ?? 'NodeOperationError').toBe('NodeOperationError');
-				if (error) expect(error.message).toMatch(/Update Fields/);
-				else expect(items[0]).toMatchObject({ id, text: 'The user likes tea' });
-			},
-		);
 	});
 
 	describe('Delete', () => {

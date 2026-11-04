@@ -252,7 +252,7 @@ export const longTermMemoryFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description:
-					'ID for the new memory, letters, digits and dashes. Creating the same ID twice does not create a duplicate. Generated when empty.',
+					"ID for the new memory: letters, digits and dashes. Creating the same ID again replaces the memory's text, type and topics. Generated when empty.",
 			},
 			{
 				displayName: 'Memory Type',

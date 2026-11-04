@@ -1,17 +1,15 @@
-import type { INodeType, INodeTypeDescription, ISupplyDataFunctions } from 'n8n-workflow';
+import type { INode, INodeType, INodeTypeDescription, ISupplyDataFunctions } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { supplyMemory } from '@n8n/ai-node-sdk';
 import { AgentMemoryChatHistory, SummaryAwareWindowedChatMemory } from './memory';
 import { AGENT_MEMORY_CREDENTIAL, createAgentMemoryRequest } from '../shared/agentMemoryRequest';
 
 type MemoryOptions = {
-	windowSize?: number;
+	/** A number from the field, or whatever an expression resolved to. */
+	windowSize?: unknown;
 	namespaceId?: string;
 	includeSummary?: boolean;
 	verifyOwner?: boolean;
-	recallLongTermMemories?: boolean;
-	recallQuery?: string;
-	recallLimit?: number;
 };
 
 /**
@@ -21,6 +19,24 @@ type MemoryOptions = {
  * yet. See docs/research.md §9.3.
  */
 const DEFAULT_WINDOW_SIZE = 50;
+
+/**
+ * The window as a whole number of 1 or more. An absent or empty option means
+ * the default; anything else that is not such a number is an error, since
+ * `slice(-NaN)` or `slice(0)` would turn the window off without a word.
+ */
+function windowSizeFrom(value: unknown, node: INode, itemIndex: number): number {
+	if (value === undefined || value === null || value === '') return DEFAULT_WINDOW_SIZE;
+	const windowSize = Number(value);
+	if (!Number.isInteger(windowSize) || windowSize < 1) {
+		throw new NodeOperationError(
+			node,
+			"'Context Window Length' must be a whole number of 1 or more",
+			{ itemIndex, description: `The option resolved to ${JSON.stringify(value)}` },
+		);
+	}
+	return windowSize;
+}
 
 export class RedisAgentMemoryChatMemory implements INodeType {
 	description: INodeTypeDescription = {
@@ -81,6 +97,44 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 					'Identifier of the user the conversation belongs to. Long-term memories extracted from the session are owned by this user.',
 				placeholder: 'e.g. user-42',
 			},
+			// Top-level, not in Options: a top-level default is always evaluated,
+			// so the switch alone is enough for recall to search the current message.
+			{
+				displayName: 'Recall Long-Term Memories',
+				name: 'recallLongTermMemories',
+				type: 'boolean',
+				default: false,
+				description:
+					"Whether to search the user's long-term memories with the Recall Query on every turn and give the results to the model, before the summary and the recent turns",
+			},
+			{
+				displayName: 'Recall Query',
+				name: 'recallQuery',
+				type: 'string',
+				default: '={{ $json.chatInput }}',
+				description: 'Text to search long-term memories with. Defaults to the current message.',
+				displayOptions: {
+					show: {
+						recallLongTermMemories: [true],
+					},
+				},
+			},
+			{
+				displayName: 'Recall Limit',
+				name: 'recallLimit',
+				type: 'number',
+				default: 5,
+				description: 'Max number of long-term memories to recall per turn',
+				typeOptions: {
+					minValue: 1,
+					maxValue: 100,
+				},
+				displayOptions: {
+					show: {
+						recallLongTermMemories: [true],
+					},
+				},
+			},
 			{
 				displayName: 'Options',
 				name: 'options',
@@ -118,34 +172,6 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 						placeholder: 'e.g. ns-product',
 					},
 					{
-						displayName: 'Recall Limit',
-						name: 'recallLimit',
-						type: 'number',
-						default: 5,
-						description:
-							'Max number of long-term memories to recall per turn. Used only when "Recall Long-Term Memories" is on.',
-						typeOptions: {
-							minValue: 1,
-							maxValue: 100,
-						},
-					},
-					{
-						displayName: 'Recall Long-Term Memories',
-						name: 'recallLongTermMemories',
-						type: 'boolean',
-						default: false,
-						description:
-							"Whether to search the user's long-term memories with the Recall Query on every turn and give the results to the model, before the summary and the recent turns",
-					},
-					{
-						displayName: 'Recall Query',
-						name: 'recallQuery',
-						type: 'string',
-						default: '={{ $json.chatInput }}',
-						description:
-							'Text to search long-term memories with. Used only when "Recall Long-Term Memories" is on.',
-					},
-					{
 						displayName: 'Verify Session Owner',
 						name: 'verifyOwner',
 						type: 'boolean',
@@ -163,20 +189,28 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 		// undefined (when the input has no such field), so coerce before trimming.
 		const sessionId = String(this.getNodeParameter('sessionId', itemIndex) ?? '').trim();
 		const actorId = String(this.getNodeParameter('actorId', itemIndex) ?? '').trim();
+		const recall = this.getNodeParameter('recallLongTermMemories', itemIndex, false) as boolean;
 		const options = this.getNodeParameter('options', itemIndex, {}) as MemoryOptions;
+		const node = this.getNode();
 
+		// n8n shows a sub-node error as "Error in sub-node …" with this message
+		// as the description and the description dropped, so the message
+		// carries the hint too.
 		if (!sessionId) {
-			throw new NodeOperationError(this.getNode(), "'Session ID' is empty", {
-				itemIndex,
-				description: 'Set a session ID, for example from the chat trigger output',
-			});
+			throw new NodeOperationError(
+				node,
+				"'Session ID' is empty. Set a session ID, for example from the chat trigger output.",
+				{ itemIndex, description: 'Set a session ID, for example from the chat trigger output' },
+			);
 		}
 		if (!actorId) {
-			throw new NodeOperationError(this.getNode(), "'User ID' is empty", {
-				itemIndex,
-				description: 'Set the ID of the user this conversation belongs to',
-			});
+			throw new NodeOperationError(
+				node,
+				"'User ID' is empty. Set the ID of the user this conversation belongs to.",
+				{ itemIndex, description: 'Set the ID of the user this conversation belongs to' },
+			);
 		}
+		const windowSize = windowSizeFrom(options.windowSize, node, itemIndex);
 
 		const request = await createAgentMemoryRequest(this, itemIndex);
 
@@ -185,16 +219,18 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 			actorId,
 			namespaceId: options.namespaceId?.trim() || undefined,
 			verifyOwner: options.verifyOwner ?? false,
+			node,
+			itemIndex,
 			request,
 		});
 
 		const memory = new SummaryAwareWindowedChatMemory(history, {
-			windowSize: options.windowSize ?? DEFAULT_WINDOW_SIZE,
+			windowSize,
 			includeSummary: options.includeSummary ?? true,
-			recall: options.recallLongTermMemories
+			recall: recall
 				? {
-						query: String(options.recallQuery ?? ''),
-						limit: options.recallLimit ?? 5,
+						query: String(this.getNodeParameter('recallQuery', itemIndex, '') ?? ''),
+						limit: Number(this.getNodeParameter('recallLimit', itemIndex, 5)),
 					}
 				: undefined,
 		});

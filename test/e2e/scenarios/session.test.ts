@@ -280,22 +280,25 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Session resource ${skipReason
 			expect(Math.abs(stored - Date.parse(storedAt))).toBeLessThanOrEqual(withinMs ?? 0);
 		});
 
-		// Today the node calls `new Date('yesterday').toISOString()`, which throws a
-		// bare RangeError. The execution fails with the message "Invalid time
-		// value" and nothing else: no description, no field name, no hint that
-		// the date is the problem.
-		it.fails("names 'Created At' in the error for a value that is not a date", async () => {
+		it("names 'Created At' in the error for a value that is not a date", async () => {
 			const sessionId = sessionFor('created-at-garbage');
 
-			const { response, error } = await addEvent({
+			const { response, items, error } = await addEvent({
 				sessionId,
 				text: 'dated',
 				createdAt: 'yesterday',
 			});
 
 			expect(response.status).toBe(500);
-			expect(error?.nodeName).toBe('Add event');
-			expect(error?.message).toContain('Created At');
+			expect(items).toEqual([]);
+			expect(error).toMatchObject({
+				nodeName: 'Add event',
+				type: 'NodeOperationError',
+				message: `'Created At' is not a date: "yesterday"`,
+				description: 'Use an ISO 8601 timestamp, for example 2024-03-15T10:00:00Z',
+				itemIndex: 0,
+			});
+			expect(await client.getSession(sessionId)).toBeUndefined();
 		});
 
 		it('binds the session to the namespace given', async () => {
@@ -472,11 +475,9 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Session resource ${skipReason
 			expect(items.map((item) => item.sessionId)).not.toContain(sessionOfB);
 		});
 
-		// Today the server answers 400 `/errors/invalid-data`: "filter: a filter
-		// (filterOwnerId or namespaceRef) or includeAll=true is required." The
-		// node sends neither when the User ID filter is empty, so a Get Many
-		// without filters fails.
-		it.fails('lists sessions without a filter', async () => {
+		// The server needs a filter or `includeAll=true`; the node sends the
+		// latter when the User ID filter is empty.
+		it('lists sessions without a filter', async () => {
 			const { response, items, error } = await runPair(workflow, 'Get all sessions', {});
 
 			expect(response.status).toBe(200);

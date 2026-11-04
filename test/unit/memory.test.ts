@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from '@n8n/ai-node-sdk';
+import type { INode } from 'n8n-workflow';
 import recordedSession from './fixtures/session-with-summary.json';
 import {
 	AgentMemoryChatHistory,
@@ -394,11 +395,25 @@ describe('recorded session with a server summary', () => {
 });
 
 describe('AgentMemoryChatHistory with Verify Session Owner', () => {
+	const NODE: INode = {
+		id: 'memory-node',
+		name: 'Redis Agent Chat Memory',
+		type: '@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory',
+		typeVersion: 1,
+		position: [0, 0],
+		parameters: {},
+	};
+	const MISMATCH =
+		'Session "session 1/a" belongs to user "user-2", not to the configured User ID "user-1". ' +
+		'Use a session ID derived from the user, or turn off "Verify Session Owner" for shared sessions.';
+
 	function verifying(request: AgentMemoryRequest) {
 		return new AgentMemoryChatHistory({
 			sessionId: 'session 1/a',
 			actorId: 'user-1',
 			verifyOwner: true,
+			node: NODE,
+			itemIndex: 3,
 			request,
 		});
 	}
@@ -413,12 +428,18 @@ describe('AgentMemoryChatHistory with Verify Session Owner', () => {
 		[`GET ${SESSION_PATH}`]: { sessionId: 'session 1/a', ownerId: 'user-1', events: [] },
 	};
 
-	it('refuses to read a session owned by another user', async () => {
+	// An n8n error on the node, with the item, so n8n reports it on the memory
+	// node whichever node called the history (the AI Agent or the Memory Manager).
+	it('refuses to read a session owned by another user, as an n8n error on the node', async () => {
 		const { request } = fakeRequest(ownedByOther);
 
-		await expect(verifying(request).getMessages()).rejects.toThrow(
-			'Session "session 1/a" belongs to user "user-2", not to the configured User ID "user-1"',
-		);
+		await expect(verifying(request).getMessages()).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: MISMATCH,
+			node: { name: 'Redis Agent Chat Memory' },
+			context: { itemIndex: 3 },
+			description: expect.stringContaining('group chats') as string,
+		});
 	});
 
 	it('reads the session once before the first write, then writes without re-reading', async () => {
@@ -437,7 +458,11 @@ describe('AgentMemoryChatHistory with Verify Session Owner', () => {
 
 		await expect(
 			verifying(request).addMessage({ role: 'user', content: [{ type: 'text', text: 'Hi' }] }),
-		).rejects.toThrow('belongs to user "user-2"');
+		).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: MISMATCH,
+			context: { itemIndex: 3 },
+		});
 		expect(calls.map((call) => call.method)).toEqual(['GET']);
 	});
 

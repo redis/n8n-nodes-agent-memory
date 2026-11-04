@@ -332,7 +332,7 @@ describe.skipIf(!agentMemoryConfig)(
 				expect(executionError(execution)).toMatchObject({
 					nodeName: branchNodes('split-insert').memory,
 					message: `Error in sub-node ${branchNodes('split-insert').memory}`,
-					description: "'User ID' is empty",
+					description: "'User ID' is empty. Set the ID of the user this conversation belongs to.",
 					itemIndex: 1,
 					lastNodeExecuted: branchNodes('split-insert').manager,
 				});
@@ -367,10 +367,8 @@ describe.skipIf(!agentMemoryConfig)(
 
 		describe('Verify Session Owner on insert', () => {
 			// The manager reads the session before it inserts, so the owner check
-			// fails inside `getMessages()`. n8n shows that error on the manager
-			// node, as the node's own `SessionOwnerMismatchError`, not on the
-			// sub-node as it does on the AI Agent path. Pinned as it is; the
-			// wanted node is the test after this one.
+			// fails inside `getMessages()`. The node throws n8n's own error with
+			// the item index, the same as on the AI Agent path.
 			it("refuses to insert into another user's session", async () => {
 				const session = newSession('verify-refuse');
 				const b = `${runPrefix}-manager-intruder-${counter}`;
@@ -387,16 +385,16 @@ describe.skipIf(!agentMemoryConfig)(
 				expect(response.status).toBe(500);
 				expect(execution.status).toBe('error');
 				expect(error).toMatchObject({
-					nodeName: branchNodes('insert-verify').manager,
-					type: 'SessionOwnerMismatchError',
+					type: 'NodeOperationError',
 					message:
 						`Session "${session.sessionId}" belongs to user "${session.userId}", not to the configured User ID "${b}". ` +
 						'Use a session ID derived from the user, or turn off "Verify Session Owner" for shared sessions.',
+					itemIndex: 0,
 				});
 				expect(await storedEvents(client, session.sessionId)).toHaveLength(2);
 			});
 
-			it.fails('shows the owner mismatch on the memory sub-node', async () => {
+			it('shows the owner mismatch on the memory sub-node', async () => {
 				const session = newSession('verify-refuse-node');
 				const b = `${runPrefix}-manager-intruder-${counter}`;
 				client.track(session.sessionId, b);

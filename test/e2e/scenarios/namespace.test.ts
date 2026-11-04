@@ -64,7 +64,7 @@ const WORKFLOW = pairsWorkflow('E2E scenario: namespace', [
 			namespaceId: '={{ $json.body.namespaceId }}',
 			updateFields: {
 				name: '={{ $json.body.name }}',
-				state: '={{ $json.body.state }}',
+				archive: '={{ $json.body.archive ?? false }}',
 			},
 		},
 	},
@@ -155,7 +155,9 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Namespace resource ${skipReas
 			expect(items[0]).toMatchObject({ name, scope: 'PERSONAL', ownerId: owner });
 		});
 
-		it("surfaces the server's 400 for PERSONAL without a User ID", async () => {
+		it('tells the user that a PERSONAL namespace needs a User ID', async () => {
+			// The server's own reason is "cannot be blank", which does not say
+			// what is blank; the node checks before calling the API.
 			const name = nameFor('personal-no-user');
 
 			const { response, items, error } = await createNamespace({ name, scope: 'PERSONAL' });
@@ -164,35 +166,16 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Namespace resource ${skipReas
 			expect(items).toEqual([]);
 			expect(error).toMatchObject({
 				nodeName: 'Create namespace',
-				type: 'NodeApiError',
-				httpCode: '400',
-				message: 'cannot be blank',
-				description: 'Invalid Request (HTTP 400)',
-			});
-			expect(error?.context?.data).toEqual({
-				type: '/errors/invalid-data',
-				title: 'Invalid Request',
-				status: 400,
-				detail: 'cannot be blank',
+				type: 'NodeOperationError',
+				message: 'A personal namespace needs a User ID',
+				description: 'Set User ID under Additional Fields, or choose the Shared scope',
+				itemIndex: 0,
 			});
 		});
 
-		// Today the user sees the server's reason, "cannot be blank", which does not
-		// say what is blank; the node must check this itself (report, fix 6).
-		it.fails('tells the user that a PERSONAL namespace needs a User ID', async () => {
-			const { error } = await createNamespace({
-				name: nameFor('personal-no-user-reason'),
-				scope: 'PERSONAL',
-			});
-
-			expect(`${error?.message} ${error?.description}`).toContain('User ID');
-		});
-
-		// Today the node always sends `scope` (its default is SHARED), and the
-		// server answers 400 "a child cannot specify scope or ownerId". So no
-		// namespace can be nested through the node. Without `scope` the same
-		// request succeeds and the child inherits the parent's scope.
-		it.fails('nests a namespace under the parent given', async () => {
+		// A child inherits its parent's scope; the server refuses a child that
+		// names one, so the node sends only the name and the parent.
+		it('nests a namespace under the parent given', async () => {
 			const parentId = await existingNamespace('parent');
 			const name = nameFor('child');
 
@@ -202,30 +185,7 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Namespace resource ${skipReas
 			expect(items[0]).toMatchObject({ name, parentId, scope: 'SHARED' });
 		});
 
-		it("surfaces the server's 400 when Parent ID is given (pins today's behaviour)", async () => {
-			const parentId = await existingNamespace('parent-today');
-
-			const { response, items, error } = await createNamespace({
-				name: nameFor('child-today'),
-				parentId,
-			});
-
-			expect(response.status).toBe(500);
-			expect(items).toEqual([]);
-			expect(error).toMatchObject({
-				nodeName: 'Create namespace',
-				httpCode: '400',
-				message: 'a child cannot specify scope or ownerId',
-			});
-			expect(error?.context?.data).toMatchObject({
-				type: '/errors/invalid-data',
-				detail: 'a child cannot specify scope or ownerId',
-			});
-		});
-
-		// Today the scope error above comes first. Sent without `scope`, the
-		// server answers 404 "Namespace Not Found" for the parent.
-		it.fails("surfaces the API's not-found for a parent that does not exist", async () => {
+		it("surfaces the API's not-found for a parent that does not exist", async () => {
 			const { error } = await createNamespace({
 				name: nameFor('orphan'),
 				parentId: `${runPrefix}-no-such-parent`,
@@ -363,7 +323,7 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Namespace resource ${skipReas
 
 			const { response, items, error } = await runPair(workflow, 'Update namespace', {
 				namespaceId,
-				state: 'ARCHIVED',
+				archive: true,
 			});
 
 			expect(response.status).toBe(200);
@@ -372,35 +332,9 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Namespace resource ${skipReas
 			expect((await getNamespace(namespaceId)).items[0].state).toBe('ARCHIVED');
 		});
 
-		// The State field offers Active and Archived, but the server only
-		// archives: "state can only be ARCHIVED". Choosing Active always fails.
-		it("surfaces the server's refusal to make an archived namespace active again", async () => {
-			const namespaceId = await existingNamespace('reactivate');
-			await runPair(workflow, 'Update namespace', { namespaceId, state: 'ARCHIVED' });
-
-			const { response, items, error } = await runPair(workflow, 'Update namespace', {
-				namespaceId,
-				state: 'ACTIVE',
-			});
-
-			expect(response.status).toBe(500);
-			expect(items).toEqual([]);
-			expect(error).toMatchObject({
-				nodeName: 'Update namespace',
-				type: 'NodeApiError',
-				httpCode: '400',
-				message: 'state can only be ARCHIVED',
-			});
-			expect(error?.context?.data).toMatchObject({
-				type: '/errors/invalid-data',
-				detail: 'state can only be ARCHIVED',
-			});
-			expect((await getNamespace(namespaceId)).items[0].state).toBe('ARCHIVED');
-		});
-
-		// With no Update Fields the node sends `{}`, which reaches the server as
-		// no body at all, and the server answers 400.
-		it("surfaces the server's 400 for an update with no fields", async () => {
+		it('tells the user that an update needs at least one field', async () => {
+			// An empty body would reach the server as no body at all, and the
+			// server would answer 400 without naming the parameter.
 			const namespaceId = await existingNamespace('no-fields');
 
 			const { response, items, error } = await runPair(workflow, 'Update namespace', {
@@ -411,25 +345,12 @@ describe.skipIf(!agentMemoryConfig)(`E2E scenario: Namespace resource ${skipReas
 			expect(items).toEqual([]);
 			expect(error).toMatchObject({
 				nodeName: 'Update namespace',
-				type: 'NodeApiError',
-				httpCode: '400',
-				message: 'Request body is required but was empty or missing.',
+				type: 'NodeOperationError',
+				message: "'Update Fields' is empty",
+				description: 'Add a Name, or switch Archive on',
+				itemIndex: 0,
 			});
-			expect(error?.context?.data).toMatchObject({
-				type: '/errors/invalid-data',
-				detail: 'Request body is required but was empty or missing.',
-			});
-		});
-
-		// Today the request goes out and fails as above; the user is not told
-		// that the node needs at least one Update Field.
-		it.fails('tells the user that an update needs at least one field', async () => {
-			const namespaceId = await existingNamespace('no-fields-reason');
-
-			const { error } = await runPair(workflow, 'Update namespace', { namespaceId });
-
-			expect(error?.type).toBe('NodeOperationError');
-			expect(`${error?.message} ${error?.description}`).toContain('Update Fields');
+			expect((await getNamespace(namespaceId)).items[0].state).toBe('ACTIVE');
 		});
 	});
 

@@ -18,12 +18,6 @@ import {
  * The single-record operations are in long-term-memory.test.ts.
  */
 
-const INVALID = {
-	type: 'NodeApiError',
-	httpCode: '400',
-	description: 'Invalid Request (HTTP 400)',
-};
-
 const searchParameters = {
 	resource: 'longTermMemory',
 	operation: 'search',
@@ -305,26 +299,27 @@ describe.skipIf(!agentMemoryConfig)(`Long-Term Memory lists inside n8n ${skipRea
 			});
 		});
 
-		it('with Max Results above 100 from an expression fails with the server limit', async () => {
-			// The editor caps typed values at 100; an expression bypasses the cap.
-			const { error } = await runPair(lists, 'Search', { userId: owner, query: 'tea', max: 500 });
+		it('names Max Results when an expression sets it above 100', async () => {
+			// The editor caps typed values at 100; an expression bypasses the cap,
+			// so the node checks the value itself before calling the API.
+			const {
+				response,
+				items: found,
+				error,
+			} = await runPair(lists, 'Search', {
+				userId: owner,
+				query: 'tea',
+				max: 500,
+			});
 
+			expect(response.status).toBe(500);
+			expect(found).toEqual([]);
 			expect(error).toMatchObject({
-				...INVALID,
 				nodeName: 'Search',
-				message: 'Limit: must be between 1 and 100.',
+				type: 'NodeOperationError',
+				message: "'Max Results' must be a whole number from 1 to 100",
+				itemIndex: 0,
 			});
-			expect(error?.context?.data).toMatchObject({
-				type: '/errors/invalid-data',
-				detail: 'Limit: must be between 1 and 100.',
-			});
-		});
-
-		it.fails('names Max Results when an expression sets it above 100', async () => {
-			// Today: NodeApiError 400 "Limit: must be between 1 and 100.", the server's words.
-			const { error } = await runPair(lists, 'Search', { userId: owner, query: 'tea', max: 500 });
-
-			expect(error?.message).toMatch(/Max Results/);
 		});
 	});
 
@@ -447,28 +442,21 @@ describe.skipIf(!agentMemoryConfig)(`Long-Term Memory lists inside n8n ${skipRea
 			});
 		});
 
-		it('with no filter at all fails with a 400 from the server', async () => {
-			// The search endpoint needs a text or at least one filter field; the
-			// node sends an empty filter, so a Get Many with no filters never works.
-			const { error } = await runPair(lists, 'Get Many unfiltered', {});
+		it('with no filter at all asks for a filter before calling the API', async () => {
+			// The search endpoint has no wildcard: it needs a text or at least one
+			// filter field. The node says so instead of sending an empty filter.
+			const { response, items: found, error } = await runPair(lists, 'Get Many unfiltered', {});
 
+			expect(response.status).toBe(500);
+			expect(found).toEqual([]);
 			expect(error).toMatchObject({
-				...INVALID,
 				nodeName: 'Get Many unfiltered',
-				message: 'Filter: at least one filter field is required.',
+				type: 'NodeOperationError',
+				message: 'Add at least one filter',
+				description:
+					'The API lists memories only by User ID, Memory Type, Namespace ID, Session ID or Topics',
+				itemIndex: 0,
 			});
-			expect(error?.context?.data).toMatchObject({
-				type: '/errors/invalid-data',
-				detail: 'Filter: at least one filter field is required.',
-			});
-		});
-
-		it.fails('with no filter at all lists memories across the store', async () => {
-			// Today: NodeApiError 400 "Filter: at least one filter field is required.".
-			const { items: found, error } = await runPair(lists, 'Get Many unfiltered', {});
-
-			expect(error).toBeUndefined();
-			expect(found.length).toBeGreaterThan(0);
 		});
 	});
 
