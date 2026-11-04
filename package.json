@@ -1,6 +1,6 @@
 {
 	"name": "@redis/n8n-nodes-agent-memory",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Redis Agent Memory for n8n AI Agents: session memory with server-side summarization and long-term memory extraction",
 	"license": "MIT",
 	"homepage": "https://github.com/redis/n8n-nodes-agent-memory#readme",
