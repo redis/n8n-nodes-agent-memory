@@ -16,6 +16,9 @@ export const AGENT_MEMORY_CREDENTIAL = 'redisAgentMemoryApi';
  */
 export const NOT_FOUND_ERROR_TYPE = '/errors/resource-not-found';
 
+/** Prefix of every `type` in the API's Problem Details bodies (RFC 9457). */
+const PROBLEM_TYPE_PREFIX = '/errors/';
+
 export interface AgentMemoryRequestOptions {
 	method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
 	/** Path below `/v1/stores/{storeId}`, starting with a slash. */
@@ -36,7 +39,7 @@ export type AgentMemoryRequest = <T>(options: AgentMemoryRequestOptions) => Prom
 /**
  * Builds the request function both nodes use: it resolves the credential's
  * store URL once, authenticates every call and turns failures into
- * `NodeApiError`s that point at the current item.
+ * `NodeApiError`s that point at the current item and quote the API's reason.
  */
 export async function createAgentMemoryRequest(
 	context: IExecuteFunctions | ISupplyDataFunctions,
@@ -67,21 +70,60 @@ export async function createAgentMemoryRequest(
 			// returns that instance as is, so the item index must be set by hand.
 			const apiError = new NodeApiError(context.getNode(), error as JsonObject, { itemIndex });
 			apiError.context.itemIndex ??= itemIndex;
-			if (allowNotFound && isResourceNotFound(apiError)) return undefined;
+			const problem = problemDetails(apiError);
+			if (allowNotFound && isResourceNotFound(apiError, problem)) return undefined;
+			if (problem) describeProblem(apiError, problem);
 			throw apiError;
 		}
 	};
 }
 
-/** True for a 404 whose body is the API's Problem Details not-found. */
-function isResourceNotFound(error: NodeApiError): boolean {
-	if (String(error.httpCode) !== '404') return false;
+/** The body the API sends with every refusal: `title` names the fault, `detail` explains it. */
+interface ProblemDetails {
+	type: string;
+	title?: string;
+	status?: number;
+	detail?: string;
+}
+
+/** The API's Problem Details from the error, or undefined for any other body (text, HTML, none). */
+function problemDetails(error: NodeApiError): ProblemDetails | undefined {
 	// NodeApiError keeps the parsed JSON body in `context.data`; a non-JSON
-	// body (text or HTML) leaves it unset.
+	// body leaves it unset.
 	const body = error.context.data;
-	return (
-		typeof body === 'object' &&
-		body !== null &&
-		(body as { type?: unknown }).type === NOT_FOUND_ERROR_TYPE
-	);
+	if (typeof body !== 'object' || body === null) return undefined;
+	const { type, title, status, detail } = body as Record<string, unknown>;
+	if (typeof type !== 'string' || !type.startsWith(PROBLEM_TYPE_PREFIX)) return undefined;
+	return {
+		type,
+		title: typeof title === 'string' && title ? title : undefined,
+		status: typeof status === 'number' ? status : undefined,
+		detail: typeof detail === 'string' && detail ? detail : undefined,
+	};
+}
+
+/** True for a 404 whose body is the API's Problem Details not-found. */
+function isResourceNotFound(error: NodeApiError, problem: ProblemDetails | undefined): boolean {
+	return String(error.httpCode) === '404' && problem?.type === NOT_FOUND_ERROR_TYPE;
+}
+
+/**
+ * Replaces n8n's text for the status code ("Bad request - please check your
+ * parameters") with what the API said. The editor shows `message` and
+ * `description`; a model that calls the node as a tool gets `message` only.
+ * So `detail` ("SessionID: must contain only …") becomes the message, and
+ * `title` ("Invalid Request", "Memory Not Found") with the status the
+ * description. The full body stays in `context.data`.
+ */
+function describeProblem(error: NodeApiError, problem: ProblemDetails): void {
+	const message = problem.detail ?? problem.title;
+	if (!message) return;
+	const status = problem.status ?? error.httpCode;
+	const statusText = status ? `HTTP ${status}` : undefined;
+	error.message = message;
+	if (problem.detail && problem.title) {
+		error.description = statusText ? `${problem.title} (${statusText})` : problem.title;
+	} else {
+		error.description = statusText;
+	}
 }
