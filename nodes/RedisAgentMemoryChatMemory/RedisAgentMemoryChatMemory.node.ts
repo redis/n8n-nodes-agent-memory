@@ -16,7 +16,7 @@ type MemoryOptions = {
  * Default Context Window Length, in interactions. Generous on purpose: the
  * server already trims the session and folds older turns into the summary,
  * so a small window here would hide turns that the summary does not cover
- * yet. See docs/research.md §9.3.
+ * yet. See docs/design-draft.md §9.3.
  */
 const DEFAULT_WINDOW_SIZE = 50;
 

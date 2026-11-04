@@ -28,23 +28,10 @@ export default defineConfig({
 					hookTimeout: 60_000,
 				},
 			},
-			// The e2e project is the short suite that runs on every pull request;
-			// e2e-scenarios is the full matrix (test/e2e/scenarios), run nightly
-			// and on demand. Both start the same stack.
 			{
 				test: {
 					name: 'e2e',
-					include: ['test/e2e/*.test.ts'],
-					globalSetup: ['test/e2e/global-setup.ts'],
-					fileParallelism: false,
-					testTimeout: 120_000,
-					hookTimeout: 300_000,
-				},
-			},
-			{
-				test: {
-					name: 'e2e-scenarios',
-					include: ['test/e2e/scenarios/**/*.test.ts'],
+					include: ['test/e2e/**/*.test.ts'],
 					globalSetup: ['test/e2e/global-setup.ts'],
 					fileParallelism: false,
 					testTimeout: 120_000,

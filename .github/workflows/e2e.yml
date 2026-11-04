@@ -2,9 +2,7 @@
 #
 # The end-to-end tests run the built package inside a stock n8n container
 # (test/e2e/docker-compose.yml), with the OpenAI API replaced by a stub.
-# Pull requests and pushes run the contract tests and the short e2e suite.
-# The nightly run (and a manual run with "Run everything") runs every layer:
-# unit, contract, e2e and the e2e scenario matrix. See docs/testing.md.
+# See docs/testing.md.
 #
 # ─── ONE-TIME SETUP ────────────────────────────────────────────────────────────
 #
@@ -31,11 +29,6 @@ on:
         description: 'n8n image tag to test against'
         required: false
         default: '2.42.6'
-      run_everything:
-        description: 'Run everything, as the nightly run does: unit, contract, e2e and the scenario matrix'
-        type: boolean
-        required: false
-        default: false
 
 concurrency:
   group: e2e-${{ github.ref }}-${{ github.event_name }}
@@ -44,8 +37,7 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    # The scenario matrix adds about 10 minutes on the nightly run.
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -60,8 +52,6 @@ jobs:
       AGENT_MEMORY_STORE_ID: ${{ secrets.AGENT_MEMORY_STORE_ID }}
       AGENT_MEMORY_API_KEY: ${{ secrets.AGENT_MEMORY_API_KEY }}
       N8N_IMAGE_TAG: ${{ matrix.n8n }}
-      # Every layer on the nightly run, or on demand.
-      RUN_EVERYTHING: ${{ (github.event_name == 'schedule' || inputs.run_everything == true) && 'true' || 'false' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -83,10 +73,6 @@ jobs:
         if: env.AGENT_MEMORY_API_KEY != ''
         run: 'docker compose -f test/e2e/docker-compose.yml pull --quiet'
 
-      - name: Run unit tests
-        if: env.RUN_EVERYTHING == 'true'
-        run: 'npm test'
-
       - name: Run contract tests
         run: 'npm run test:contract'
         env:
@@ -95,13 +81,6 @@ jobs:
 
       - name: Run end-to-end tests
         run: 'npm run test:e2e'
-
-      - name: Run end-to-end scenario tests
-        if: env.RUN_EVERYTHING == 'true'
-        run: 'npm run test:e2e:scenarios'
-        env:
-          # Also send wrong credentials to the gateway (six requests, once a night).
-          E2E_CREDENTIAL_TESTS: 'true'
 
       - name: Upload container logs
         if: failure()

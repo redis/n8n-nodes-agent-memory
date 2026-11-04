@@ -1,10 +1,9 @@
 /*
  * Test harness code: it runs in Node during tests and is never published
  * (package.json "files" ships only dist). The n8n Cloud rules below guard
- * node code, which must not spawn processes or embed secrets. OWNER's
- * password is not a secret: it opens a local, test-only n8n.
+ * node code, which must not spawn processes.
  */
-/* eslint-disable @n8n/community-nodes/no-restricted-imports, @n8n/community-nodes/no-dangerous-functions, @n8n/community-nodes/require-node-api-error, @n8n/community-nodes/no-hardcoded-secrets, no-console */
+/* eslint-disable @n8n/community-nodes/no-restricted-imports, @n8n/community-nodes/no-dangerous-functions, @n8n/community-nodes/require-node-api-error, no-console */
 import { execFileSync } from 'node:child_process';
 import {
 	chmodSync,
@@ -35,12 +34,6 @@ function fixtureWorkflowIds(): string[] {
 			return id;
 		});
 }
-
-/**
- * The owner account preset by docker-compose.yml, for logging in from a
- * browser. The stack listens on 127.0.0.1 only and holds test data only.
- */
-export const OWNER = { email: 'e2e@example.com', password: 'E2e-test-password1' };
 
 /** Copies only what npm would publish, so peers resolve from n8n, not from our node_modules. */
 function stagePackage(): void {

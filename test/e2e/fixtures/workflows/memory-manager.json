@@ -177,6 +177,72 @@
 					"name": "Agent Memory (e2e)"
 				}
 			}
+		},
+		{
+			"id": "node-e2e-memory-insert-verified",
+			"name": "Insert verified webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				1000
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0005",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-memory-insert-verified",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-insert-verified-messages",
+			"name": "Insert messages (verify owner)",
+			"type": "@n8n/n8n-nodes-langchain.memoryManager",
+			"typeVersion": 1.1,
+			"position": [
+				260,
+				1000
+			],
+			"parameters": {
+				"mode": "insert",
+				"insertMode": "insert",
+				"messages": {
+					"messageValues": [
+						{
+							"type": "user",
+							"message": "={{ $json.body.user }}"
+						},
+						{
+							"type": "ai",
+							"message": "={{ $json.body.ai }}"
+						}
+					]
+				}
+			}
+		},
+		{
+			"id": "node-memory-verify-owner",
+			"name": "Redis Agent Chat Memory (verify owner)",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				1160
+			],
+			"parameters": {
+				"sessionId": "={{ $json.body.sessionId }}",
+				"actorId": "={{ $json.body.userId }}",
+				"options": {
+					"verifyOwner": true
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
 		}
 	],
 	"connections": {
@@ -245,6 +311,28 @@
 					{
 						"node": "Override messages",
 						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Insert verified webhook": {
+			"main": [
+				[
+					{
+						"node": "Insert messages (verify owner)",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Redis Agent Chat Memory (verify owner)": {
+			"ai_memory": [
+				[
+					{
+						"node": "Insert messages (verify owner)",
+						"type": "ai_memory",
 						"index": 0
 					}
 				]

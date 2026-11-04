@@ -60,6 +60,7 @@
 				"httpMethod": "POST",
 				"path": "e2e-action-memory-search",
 				"responseMode": "lastNode",
+				"responseData": "allEntries",
 				"options": {}
 			}
 		},
@@ -77,8 +78,11 @@
 				"operation": "search",
 				"query": "={{ $json.body.query }}",
 				"ownerId": "={{ $json.body.userId }}",
-				"maxResults": 5,
-				"options": {}
+				"maxResults": "={{ $json.body.maxResults ?? 5 }}",
+				"options": {
+					"filterOp": "={{ $json.body.filterOp ?? 'all' }}",
+					"topics": "={{ $json.body.topics ?? '' }}"
+				}
 			},
 			"credentials": {
 				"redisAgentMemoryApi": {
@@ -202,6 +206,298 @@
 					"name": "Agent Memory (e2e)"
 				}
 			}
+		},
+		{
+			"id": "node-e2e-action-memory-get",
+			"name": "memory-get webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				1000
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0025",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-get",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-get",
+			"name": "Action: memory-get",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				1000
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "get",
+				"memoryId": "={{ $json.body.memoryId }}"
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-event-add",
+			"name": "event-add webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				1200
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0026",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-event-add",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-event-add",
+			"name": "Action: event-add",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				1200
+			],
+			"parameters": {
+				"resource": "session",
+				"operation": "addEvent",
+				"sessionId": "={{ $json.body.sessionId }}",
+				"actorId": "={{ $json.body.userId }}",
+				"role": "USER",
+				"text": "={{ $json.body.text }}",
+				"additionalFields": {
+					"createdAt": "={{ $json.body.createdAt ?? '' }}"
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-memory-list",
+			"name": "memory-list webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				1400
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0027",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-list",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-list",
+			"name": "Action: memory-list",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				1400
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "getAll",
+				"returnAll": false,
+				"limit": 100,
+				"filters": {
+					"ownerId": "={{ $json.body.userId ?? '' }}"
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-memory-update",
+			"name": "memory-update webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				1600
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0028",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-update",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-update",
+			"name": "Action: memory-update",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				1600
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "update",
+				"memoryId": "={{ $json.body.memoryId }}",
+				"updateFields": {
+					"text": "={{ $json.body.text ?? '' }}"
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-namespace-create",
+			"name": "namespace-create webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				1800
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0029",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-namespace-create",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-namespace-create",
+			"name": "Action: namespace-create",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				1800
+			],
+			"parameters": {
+				"resource": "namespace",
+				"operation": "create",
+				"name": "={{ $json.body.name }}",
+				"scope": "={{ $json.body.scope ?? 'SHARED' }}",
+				"additionalFields": {
+					"parentId": "={{ $json.body.parentId ?? '' }}",
+					"ownerId": "={{ $json.body.userId ?? '' }}"
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-namespace-update",
+			"name": "namespace-update webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				2000
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a002a",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-namespace-update",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-namespace-update",
+			"name": "Action: namespace-update",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				2000
+			],
+			"parameters": {
+				"resource": "namespace",
+				"operation": "update",
+				"namespaceId": "={{ $json.body.namespaceId }}",
+				"updateFields": {
+					"name": "={{ $json.body.name ?? '' }}",
+					"archive": "={{ $json.body.archive ?? false }}"
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-session-list",
+			"name": "session-list webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				2200
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a002b",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-session-list",
+				"responseMode": "lastNode",
+				"responseData": "allEntries",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-session-list",
+			"name": "Action: session-list",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				2200
+			],
+			"parameters": {
+				"resource": "session",
+				"operation": "getAll",
+				"returnAll": true,
+				"filters": {
+					"ownerId": "={{ $json.body.userId ?? '' }}"
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
 		}
 	],
 	"connections": {
@@ -254,6 +550,83 @@
 				[
 					{
 						"node": "Action: event-delete",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"memory-get webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-get",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"event-add webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: event-add",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"memory-list webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-list",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"memory-update webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-update",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"namespace-create webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: namespace-create",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"namespace-update webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: namespace-update",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"session-list webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: session-list",
 						"type": "main",
 						"index": 0
 					}

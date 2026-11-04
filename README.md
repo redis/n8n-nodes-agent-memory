@@ -143,7 +143,7 @@ Notes:
 - [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
 - [Redis Agent Memory documentation](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/)
 - [Agent Memory REST API reference](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/api-reference/)
-- [Research notes for this node](docs/research.md)
+- [Design draft for this node](docs/design-draft.md)
 
 ## License
 
