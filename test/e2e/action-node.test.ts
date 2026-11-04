@@ -7,9 +7,19 @@ import {
 	executionError,
 	N8N_URL,
 	postJson,
+	restData,
 	type ExecutionError,
 } from './harness';
 
+/** An event as Session → Get returns it with Simplify on. */
+interface SimpleEvent {
+	eventId: string;
+	actorId: string;
+	role: string;
+	text: string;
+}
+
+/** An event as the API returns it, which Simplify off passes through. */
 interface StoredEvent {
 	eventId: string;
 	actorId: string;
@@ -125,12 +135,12 @@ describe.skipIf(!agentMemoryConfig)(
 				ai: 'Second',
 			});
 
-			const [session] = await callAction<{ ownerId: string; events: StoredEvent[] }>(
+			const [session] = await callAction<{ ownerId: string; events: SimpleEvent[] }>(
 				'e2e-action-session-get',
 				{ sessionId },
 			);
 			expect(session.ownerId).toBe(userId);
-			expect(session.events.map((e) => e.content[0].text)).toEqual(['First', 'Second']);
+			expect(session.events.map((e) => e.text)).toEqual(['First', 'Second']);
 
 			const [deleted] = await callAction<{ deleted: boolean; eventId: string }>(
 				'e2e-action-event-delete',
@@ -138,10 +148,17 @@ describe.skipIf(!agentMemoryConfig)(
 			);
 			expect(deleted).toEqual({ deleted: true, sessionId, eventId: session.events[0].eventId });
 
-			const [after] = await callAction<{ events: StoredEvent[] }>('e2e-action-session-get', {
+			const [after] = await callAction<{ events: SimpleEvent[] }>('e2e-action-session-get', {
 				sessionId,
 			});
-			expect(after.events.map((e) => e.content[0].text)).toEqual(['Second']);
+			expect(after.events.map((e) => e.text)).toEqual(['Second']);
+
+			// With Simplify off, the events keep the API's content parts.
+			const [raw] = await callAction<{ events: StoredEvent[] }>('e2e-action-session-get', {
+				sessionId,
+				simple: false,
+			});
+			expect(raw.events.map((e) => e.content)).toEqual([[{ text: 'Second' }]]);
 		});
 
 		it('creates a memory, finds it for its user only, then deletes it', async () => {
@@ -178,6 +195,83 @@ describe.skipIf(!agentMemoryConfig)(
 				query: 'Does the user have any allergies?',
 			});
 			expect(afterDelete.map((m) => m.id)).not.toContain(created.id);
+		});
+
+		it('returns simplified records by default and the raw API objects with Simplify off', async () => {
+			const userId = newUser('simplify');
+			const namespaceId = await createNamespace('simplify');
+			const targetId = await createNamespace('simplify-target');
+
+			const [created] = await callAction<Record<string, unknown>>('e2e-action-memory-create', {
+				userId,
+				text: 'The user drinks oat milk',
+				namespaceId,
+			});
+			expect(created).toEqual({
+				id: expect.stringMatching(/^n8n-/),
+				text: 'The user drinks oat milk',
+				ownerId: userId,
+				namespaceId,
+			});
+
+			const [raw] = await callAction<Record<string, unknown>>('e2e-action-memory-get', {
+				memoryId: created.id,
+				simple: false,
+			});
+			expect(raw).toMatchObject({ id: created.id, namespaceRef: { namespaceId } });
+			expect(raw).not.toHaveProperty('namespaceId');
+
+			// The Namespace locator in ID mode, fed by an expression.
+			const [moved] = await callAction<Record<string, unknown>>('e2e-action-memory-move', {
+				memoryId: created.id,
+				namespaceId: targetId,
+			});
+			expect(moved).toEqual({ moved: true, id: created.id, namespaceId: targetId });
+			const [afterMove] = await callAction<Record<string, unknown>>('e2e-action-memory-get', {
+				memoryId: created.id,
+			});
+			expect(afterMove).toMatchObject({ id: created.id, namespaceId: targetId });
+
+			const [namespace] = await callAction<Record<string, unknown>>('e2e-action-namespace-get', {
+				namespaceId,
+			});
+			expect(namespace).toEqual({
+				namespaceId,
+				name: `${runPrefix}-action-simplify`,
+				scope: 'SHARED',
+				state: 'ACTIVE',
+			});
+			const [rawNamespace] = await callAction<Record<string, unknown>>('e2e-action-namespace-get', {
+				namespaceId,
+				simple: false,
+			});
+			expect(rawNamespace).toMatchObject({ namespaceId, path: expect.any(String) });
+			expect(rawNamespace).toHaveProperty('createdAt');
+		});
+
+		// The editor fills the Namespace locator's "From List" mode through this
+		// endpoint, which runs the node's `searchNamespaces` with the credential.
+		it("lists the store's namespaces for the Namespace locator", async () => {
+			const page = await restData<{ results: Array<{ name: string; value: string }> }>(
+				'/dynamic-node-parameters/resource-locator-results',
+				{
+					path: 'parameters.namespaceId',
+					methodName: 'searchNamespaces',
+					nodeTypeAndVersion: {
+						name: '@redis/n8n-nodes-agent-memory.redisAgentMemory',
+						version: 1,
+					},
+					currentNodeParameters: { resource: 'namespace', operation: 'get' },
+					credentials: {
+						redisAgentMemoryApi: { id: 'e2eAgentMemory01', name: 'Agent Memory (e2e)' },
+					},
+				},
+			);
+
+			expect(page.results.length).toBeGreaterThan(0);
+			for (const item of page.results) {
+				expect(item).toEqual({ name: expect.any(String), value: expect.any(String) });
+			}
 		});
 
 		// Each test here pins a fix to a defect the first end-to-end run of the
@@ -251,7 +345,13 @@ describe.skipIf(!agentMemoryConfig)(
 				);
 				namespaceIds.push(child.namespaceId);
 
-				expect(child).toMatchObject({ name, parentId });
+				expect(child).toEqual({
+					namespaceId: child.namespaceId,
+					name,
+					scope: 'SHARED',
+					state: 'ACTIVE',
+					parentId,
+				});
 			});
 
 			// Get Many with no User ID sent no filter, which the server refused;

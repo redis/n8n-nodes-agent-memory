@@ -132,6 +132,8 @@ The SDK is a thin layer over REST. A node that only wraps CRUD calls would add l
 
 _(2026-11-04: of points 4 and 5, the node ships resource and operation dropdowns, paging for every Get Many, and errors that quote the API's own reason (§2.1). It has no `loadOptions` for namespaces, no retries, and no special handling of 409 or 424 beyond that quoting; none has been missed in testing.)_
 
+_(2026-11-04, later: the namespace list now ships, as a `listSearch` resource locator on the top-level Namespace fields of Namespace → Get, Update, Delete and Long-Term Memory → Move, rather than as `loadOptions`; the node matches a search string against the names itself, since the API has no name search. Every operation that returns records also gained n8n's Simplify switch, on by default.)_
+
 ## 4. n8n verification rules
 
 Source: [Community Node Verification Guidelines](https://docs.n8n.io/connect/create-nodes/build-your-node/reference/verification-guidelines.md). The old `/integrations/creating-nodes/build/reference/verification-guidelines/` URL now returns a 404.

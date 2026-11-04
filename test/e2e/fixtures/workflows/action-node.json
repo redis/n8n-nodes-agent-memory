@@ -37,7 +37,10 @@
 				"operation": "create",
 				"text": "={{ $json.body.text }}",
 				"ownerId": "={{ $json.body.userId }}",
-				"additionalFields": {}
+				"simple": "={{ $json.body.simple ?? true }}",
+				"additionalFields": {
+					"namespaceId": "={{ $json.body.namespaceId ?? '' }}"
+				}
 			},
 			"credentials": {
 				"redisAgentMemoryApi": {
@@ -159,6 +162,7 @@
 				"resource": "session",
 				"operation": "get",
 				"sessionId": "={{ $json.body.sessionId }}",
+				"simple": "={{ $json.body.simple ?? true }}",
 				"options": {}
 			},
 			"credentials": {
@@ -236,7 +240,8 @@
 			"parameters": {
 				"resource": "longTermMemory",
 				"operation": "get",
-				"memoryId": "={{ $json.body.memoryId }}"
+				"memoryId": "={{ $json.body.memoryId }}",
+				"simple": "={{ $json.body.simple ?? true }}"
 			},
 			"credentials": {
 				"redisAgentMemoryApi": {
@@ -444,7 +449,12 @@
 			"parameters": {
 				"resource": "namespace",
 				"operation": "update",
-				"namespaceId": "={{ $json.body.namespaceId }}",
+				"namespaceId": {
+					"__rl": true,
+					"mode": "id",
+					"value": "={{ $json.body.namespaceId ?? '' }}"
+				},
+				"simple": "={{ $json.body.simple ?? true }}",
 				"updateFields": {
 					"name": "={{ $json.body.name ?? '' }}",
 					"archive": "={{ $json.body.archive ?? false }}"
@@ -490,6 +500,92 @@
 				"returnAll": true,
 				"filters": {
 					"ownerId": "={{ $json.body.userId ?? '' }}"
+				}
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-namespace-get",
+			"name": "namespace-get webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				2400
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a002c",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-namespace-get",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-namespace-get",
+			"name": "Action: namespace-get",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				2400
+			],
+			"parameters": {
+				"resource": "namespace",
+				"operation": "get",
+				"namespaceId": {
+					"__rl": true,
+					"mode": "id",
+					"value": "={{ $json.body.namespaceId ?? '' }}"
+				},
+				"simple": "={{ $json.body.simple ?? true }}"
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-memory-move",
+			"name": "memory-move webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				2600
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a002d",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-move",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-move",
+			"name": "Action: memory-move",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				2600
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "move",
+				"memoryId": "={{ $json.body.memoryId }}",
+				"namespaceId": {
+					"__rl": true,
+					"mode": "id",
+					"value": "={{ $json.body.namespaceId ?? '' }}"
 				}
 			},
 			"credentials": {
@@ -627,6 +723,28 @@
 				[
 					{
 						"node": "Action: session-list",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"namespace-get webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: namespace-get",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"memory-move webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-move",
 						"type": "main",
 						"index": 0
 					}

@@ -1,6 +1,7 @@
 import type {
 	IExecuteFunctions,
 	IHttpRequestMethods,
+	ILoadOptionsFunctions,
 	ISupplyDataFunctions,
 	JsonObject,
 } from 'n8n-workflow';
@@ -49,9 +50,11 @@ export type AgentMemoryRequest = <T>(options: AgentMemoryRequestOptions) => Prom
  * Builds the request function both nodes use: it resolves the credential's
  * store URL once, authenticates every call and turns failures into
  * `NodeApiError`s that point at the current item and quote the API's reason.
+ * A list-search method (`ILoadOptionsFunctions`) can use it too; it has the
+ * same credentials, node and HTTP helper.
  */
 export async function createAgentMemoryRequest(
-	context: IExecuteFunctions | ISupplyDataFunctions,
+	context: IExecuteFunctions | ISupplyDataFunctions | ILoadOptionsFunctions,
 	itemIndex: number,
 ): Promise<AgentMemoryRequest> {
 	const credentials = await context.getCredentials<{ serverUrl: string; storeId: string }>(

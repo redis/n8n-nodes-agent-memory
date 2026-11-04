@@ -1,4 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
+import { namespaceLocatorField, simplifyField } from './SharedFields';
 
 const show = (operation: string[]) => ({
 	show: { resource: ['longTermMemory'], operation },
@@ -115,6 +116,7 @@ export const longTermMemoryFields: INodeProperties[] = [
 		},
 		displayOptions: show(['search']),
 	},
+	simplifyField(show(['search'])),
 	{
 		displayName: 'Options',
 		name: 'options',
@@ -184,6 +186,7 @@ export const longTermMemoryFields: INodeProperties[] = [
 			show: { resource: ['longTermMemory'], operation: ['getAll'], returnAll: [false] },
 		},
 	},
+	simplifyField(show(['getAll'])),
 	{
 		displayName: 'Filters',
 		name: 'filters',
@@ -238,6 +241,7 @@ export const longTermMemoryFields: INodeProperties[] = [
 		},
 		displayOptions: show(['create']),
 	},
+	simplifyField(show(['create'])),
 	{
 		displayName: 'Additional Fields',
 		name: 'additionalFields',
@@ -281,15 +285,8 @@ export const longTermMemoryFields: INodeProperties[] = [
 
 	// ----- get / update / delete / move -----
 	memoryIdField,
-	{
-		displayName: 'Namespace ID',
-		name: 'namespaceId',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'ID of the namespace to move the memory to',
-		displayOptions: show(['move']),
-	},
+	simplifyField(show(['get', 'update'])),
+	namespaceLocatorField('Namespace to move the memory to', show(['move'])),
 	{
 		displayName: 'Update Fields',
 		name: 'updateFields',

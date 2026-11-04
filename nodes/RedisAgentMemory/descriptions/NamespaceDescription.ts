@@ -1,4 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
+import { namespaceLocatorField, simplifyField } from './SharedFields';
 
 const show = (operation: string[]) => ({
 	show: { resource: ['namespace'], operation },
@@ -50,15 +51,8 @@ export const namespaceOperations: INodeProperties[] = [
 ];
 
 export const namespaceFields: INodeProperties[] = [
-	{
-		displayName: 'Namespace ID',
-		name: 'namespaceId',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'ID of the namespace',
-		displayOptions: show(['get', 'update', 'delete']),
-	},
+	namespaceLocatorField('Namespace to get, update or delete', show(['get', 'update', 'delete'])),
+	simplifyField(show(['get', 'update'])),
 
 	// ----- create -----
 	{
@@ -84,6 +78,7 @@ export const namespaceFields: INodeProperties[] = [
 			"Whether the namespace belongs to one user (set User ID below) or is shared. Ignored when Parent ID is set: a child inherits its parent's scope.",
 		displayOptions: show(['create']),
 	},
+	simplifyField(show(['create'])),
 	{
 		displayName: 'Additional Fields',
 		name: 'additionalFields',
@@ -132,6 +127,7 @@ export const namespaceFields: INodeProperties[] = [
 			show: { resource: ['namespace'], operation: ['getAll'], returnAll: [false] },
 		},
 	},
+	simplifyField(show(['getAll'])),
 
 	// ----- update -----
 	{

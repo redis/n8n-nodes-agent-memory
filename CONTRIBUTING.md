@@ -119,6 +119,7 @@ npm run e2e:down   # stop it
 - `README.md` is the user-facing documentation and is shown on npm.
 - `docs/testing.md` describes the test layers and the end-to-end stack.
 - `docs/design-draft.md` holds the background and design decisions.
+- `examples/` holds workflows the README points to. When a node parameter changes, import them into n8n again to check that they still load and run.
 - `AGENTS.md` and `.agents/` guide coding agents and contributors.
 
 Every user-visible change gets a line in `CHANGELOG.md` under the unreleased

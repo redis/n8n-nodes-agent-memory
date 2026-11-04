@@ -1,4 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
+import { simplifyField } from './SharedFields';
 
 const show = (operation: string[]) => ({
 	show: { resource: ['session'], operation },
@@ -70,6 +71,7 @@ export const sessionFields: INodeProperties[] = [
 	},
 
 	// ----- get -----
+	simplifyField(show(['get'])),
 	{
 		displayName: 'Options',
 		name: 'options',

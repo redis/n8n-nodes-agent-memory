@@ -174,17 +174,27 @@ async function login(): Promise<string> {
 	}
 }
 
-/** `GET /rest<path>` as the owner, unwrapping n8n's `{ data }` envelope. A rejected cookie earns one new login. */
-async function restData<T>(path: string): Promise<T> {
+/**
+ * `/rest<path>` as the owner, unwrapping n8n's `{ data }` envelope: a GET, or
+ * a POST of `body` as JSON. A rejected cookie earns one new login.
+ */
+export async function restData<T>(path: string, body?: object): Promise<T> {
+	const method = body ? 'POST' : 'GET';
 	for (let attempt = 0; ; attempt++) {
 		cookie ??= await login();
-		const response = await fetch(`${N8N_URL}/rest${path}`, { headers: { cookie } });
+		const response = await fetch(`${N8N_URL}/rest${path}`, {
+			method,
+			headers: { cookie, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+			body: body ? JSON.stringify(body) : undefined,
+		});
 		const text = await response.text();
 		if (response.status === 401 && attempt === 0) {
 			cookie = undefined;
 			continue;
 		}
-		if (!response.ok) throw new Error(`GET /rest${path} returned ${response.status}: ${text}`);
+		if (!response.ok) {
+			throw new Error(`${method} /rest${path} returned ${response.status}: ${text}`);
+		}
 		return (JSON.parse(text) as { data: T }).data;
 	}
 }

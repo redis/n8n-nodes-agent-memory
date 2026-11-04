@@ -89,6 +89,8 @@ One node with two faces. In the node list it is **Redis Agent Memory**, an actio
 
 Never let the model fill **User ID**: that is what keeps one user's memories away from another. Extraction is asynchronous, so a fact said in this turn may not be searchable until the next one.
 
+**Output and namespaces.** Every operation that returns records has a **Simplify** switch, on by default. A memory keeps `id`, `text`, `ownerId`, `memoryType`, `topics`, `namespaceId`, `sessionId` and `createdAt`; a namespace keeps `namespaceId`, `name`, `scope`, `state`, `parentId` and `ownerId`; Session → Get keeps `sessionId`, `ownerId`, `namespaceId`, the `summary` text and the `events`, each with `eventId`, `actorId`, `role`, `text` and `createdAt`. Switch it off for the API's object as it came. The **Namespace** field of Namespace → Get, Update, Delete and Long-Term Memory → Move offers the store's namespaces from a list, or takes an ID or expression.
+
 ## Credentials
 
 Create a **Redis Agent Memory API** credential with:
@@ -111,6 +113,10 @@ The credential test calls the store health endpoint.
 3. Set **User ID** to a stable identifier for the end user, taken from the authenticated trigger (a JWT claim, a Telegram or Slack sender ID), not from the request body.
 4. Chat. Recent turns are replayed to the model, older turns are summarized, and facts about the user accumulate in long-term memory.
 5. To bring those facts back in later conversations, either turn on **Recall Long-Term Memories** on the memory sub-node (every turn, no wiring), or attach a **Redis Agent Memory Tool** set to Long-Term Memory → Search (the agent decides when to look). Both can be combined.
+
+### Example workflow
+
+[`examples/agent-with-long-term-memory.json`](examples/agent-with-long-term-memory.json) is a workflow you can import: a Chat Trigger, an AI Agent with an OpenAI model, **Redis Agent Chat Memory** with *Recall Long-Term Memories* on, and two **Redis Agent Memory Tools**, *Search memories* and *Save memory*. Import it, select your Redis Agent Memory and OpenAI credentials, and chat: "I'm vegetarian and I live in Sofia." Then start a new chat, which is a new session, and ask "What should I cook tonight?" The answer uses what you said in the first conversation: the agent saved it with *Save memory*, the server also extracts such facts from the conversation on its own, and the memory node recalled it for the new turn. The example pins the User ID to `demo-user` in an Edit Fields node; in your workflow, take it from the authenticated trigger.
 
 ## Development
 
