@@ -43,6 +43,13 @@ export const agentMemoryConfig: AgentMemoryTestConfig | undefined =
  */
 export const summaryTests = process.env.AGENT_MEMORY_SUMMARY_TESTS === 'true';
 
+/**
+ * Opt-in for the contract test that refreshes a summary view and waits for
+ * the server to compute it, which takes a model call. Off unless
+ * `AGENT_MEMORY_SUMMARY_VIEW_TESTS=true`. CI turns it on.
+ */
+export const summaryViewTests = process.env.AGENT_MEMORY_SUMMARY_VIEW_TESTS === 'true';
+
 export const skipReason =
 	missingAgentMemoryEnv.length > 0
 		? `Skipped: set ${missingAgentMemoryEnv.join(', ')} (in the environment or .env) to run tests against Agent Memory`

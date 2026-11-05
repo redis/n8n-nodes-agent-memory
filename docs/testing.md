@@ -38,6 +38,14 @@ variable. The same wire shape is also pinned without the network:
 `GET …/sessions/{sessionId}` response with a real summary, and a unit
 test maps it through the node's classes.
 
+A second contract test is opt-in for the same reason: with
+`AGENT_MEMORY_SUMMARY_VIEW_TESTS=true` it creates a summary view, seeds two
+long-term memories, refreshes the user's partition and waits up to 120
+seconds for the server to compute the summary. The rest of the summary view
+contract tests (create, get, list, update, delete, a cold result, the `202`
+on delete) run whenever the store is configured. Summary views must be
+enabled on the store; the hosted test store has them.
+
 Every run prefixes the session and user IDs it creates with `it-<run>-<random>`,
 and deletes its sessions and the long-term memories of its users at the end.
 Concurrent runs on the shared store don't see each other's data. Long-term
@@ -79,6 +87,9 @@ The workflows are in `test/e2e/fixtures/workflows/`:
 - **Chat agent**: Chat Trigger → AI Agent, with the stub model, this node as
   memory, and a Calculator tool. The node is also connected to the Chat
   Trigger, for "Load Previous Session".
+- **Chat agent with recall** and **Chat agent with summary view**: the same
+  agent with Recall Long-Term Memories on, or with Summary View ID taken from
+  the chat message, so each test can name the view it created.
 
 The tests in [`test/e2e/memory.test.ts`](../test/e2e/memory.test.ts) cover
 insert and load, separate sessions, clearing, Insert with Override All, a
@@ -86,7 +97,8 @@ second turn that sees the first, a turn with a tool call, loading a previous
 session without the summary, and history that survives an n8n restart. They
 also read the stored events straight from the Agent Memory API.
 [`test/e2e/action-node.test.ts`](../test/e2e/action-node.test.ts) drives the
-action node through webhooks, and asks n8n's own REST endpoint for the
+action node through webhooks, including a summary view's definition and a
+user's result, and asks n8n's own REST endpoint for the
 Namespace locator's list, which runs the node's `searchNamespaces` with the
 credential. Both files end with a group of tests that pin the fixes from the
 design verification below, one per fix.

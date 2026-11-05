@@ -45,9 +45,11 @@ export class AgentMemoryTestClient {
 		method,
 		path,
 		body,
+		qs,
 		allowNotFound,
 	}: Parameters<AgentMemoryRequest>[0]) => {
-		const url = this.storeUrl(path);
+		const url = new URL(this.storeUrl(path));
+		for (const [key, value] of Object.entries(qs ?? {})) url.searchParams.set(key, String(value));
 		const response = await fetch(url, {
 			method,
 			headers: {

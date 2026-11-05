@@ -51,7 +51,7 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 Connects to the **Memory** input of an AI Agent.
 
-- **Loading history.** Returns the session's recent turns to the AI Agent. When enabled, they are preceded by the server-maintained summary of older turns and by long-term memories recalled for the current message. The Chat Trigger's "Load Previous Session" and the Chat Memory Manager get the turns only.
+- **Loading history.** Returns the session's recent turns to the AI Agent. When enabled, they are preceded by the server-maintained summary of older turns, by a summary view's briefing on the user, and by long-term memories recalled for the current message. The Chat Trigger's "Load Previous Session" and the Chat Memory Manager get the turns only.
 - **Saving history.** Appends each user and assistant message as a session event. Tool calls and tool results are not stored. Agent Memory then extracts long-term memories from the events asynchronously.
 
 | Parameter | Description |
@@ -64,6 +64,7 @@ Connects to the **Memory** input of an AI Agent.
 | Options → Context Window Length | How many past interactions are sent to the model (default 50, max 500). Keep it at least as high as the number of turns the server retains; see below. An expression must resolve to a whole number of 1 or more, or the run fails; an empty value means the default. |
 | Options → Include Summary | Whether to prepend the summary of older turns (default on). |
 | Options → Namespace ID | Binds the session to a namespace, so extracted memories land in it and recall searches only it. |
+| Options → Summary View ID | ID of a summary view grouped by user (see the action node's Summary View resource). When set, the view's summary of the User ID is given to the model on every turn, before the session summary, once the server has computed it; until then, and if the view is gone, nothing is added. Adds one request per turn. Empty by default. |
 | Options → Verify Session Owner | Whether to refuse a session that the server says belongs to another user (default off). |
 
 **Who may read a session.** Anyone who sends a session ID can read and extend that session; the node cannot tell a client from another. Authentication belongs to the trigger (Webhook with header or JWT auth, Chat Trigger with Basic or n8n user auth, Telegram or Slack sender IDs), and the workflow should take the Session ID from that authenticated context or derive it from the user. The server records the first writer as the session's owner but accepts events from any user after that. Turn on **Verify Session Owner** when every session belongs to one user: the node then fails instead of mixing two users' turns. Leave it off for shared sessions, such as group chats.
@@ -81,6 +82,7 @@ One node with two faces. In the node list it is **Redis Agent Memory**, an actio
 | Long-Term Memory | Search (by meaning, for one user), Get Many (by filters), Create, Get, Update, Delete, Move (to another namespace) |
 | Session | Get, Get Many, Delete, Add Event, Delete Event |
 | Namespace | Create, Get, Get Many, Update, Delete |
+| Summary View | Get Result (one group's summary), Refresh, Create, Get, Get Many, Update, Delete |
 
 **Redis Agent Memory Tool.** Attach one **Redis Agent Memory Tool** per operation to the Agent's **Tool** input and pin everything but the content: set **Resource**, **Operation** and **User ID** yourself, and let the model fill **Query** (Search) or **Text** (Create) with *Let the model define this parameter*. Two instances cover most agents:
 
@@ -89,7 +91,9 @@ One node with two faces. In the node list it is **Redis Agent Memory**, an actio
 
 Never let the model fill **User ID**: that is what keeps one user's memories away from another. Extraction is asynchronous, so a fact said in this turn may not be searchable until the next one.
 
-**Output and namespaces.** Every operation that returns records has a **Simplify** switch, on by default. A memory keeps `memoryId`, `text`, `ownerId`, `memoryType`, `topics`, `namespaceId`, `sessionId` and `createdAt`; a namespace keeps `namespaceId`, `name`, `scope`, `state`, `parentId` and `ownerId`; Session → Get keeps `sessionId`, `ownerId`, `namespaceId`, the `summary` text and the `events`, each with `eventId`, `actorId`, `role`, `text` and `createdAt`. Switch it off for the API's object as it came. The **Namespace** field of Namespace → Get, Update, Delete and Long-Term Memory → Move offers the store's namespaces from a list, or takes an ID or expression.
+**Summary views.** A summary view is a standing summary the server keeps over long-term memories, one per group: per user, session, namespace or memory type. Create one with **Summary View → Create** (name, **Group By**, text or structured output, optional instructions and filters), then read a group with **Get Result**, giving the keys the view groups by under **Scope**, for example the User ID. A view with **Refresh Mode** *Manual* computes a summary only after **Refresh**; *Continuous* recomputes whenever the memories change, at a model call per change. A result's `status` is `COLD` or `PENDING` until it is computed, then `READY`, `EMPTY` or `FAILED`; **Wait For Result** polls every two seconds until one of those, up to **Max Wait** seconds, and a `FAILED` result is returned as an item with its `errorCode`. As a tool, pin the view and the User ID scope so the agent can ask for what is known about the current user in one call. Summary views must be enabled on the store.
+
+**Output and namespaces.** Every operation that returns records has a **Simplify** switch, on by default. A memory keeps `memoryId`, `text`, `ownerId`, `memoryType`, `topics`, `namespaceId`, `sessionId` and `createdAt`; a namespace keeps `namespaceId`, `name`, `scope`, `state`, `parentId` and `ownerId`; Session → Get keeps `sessionId`, `ownerId`, `namespaceId`, the `summary` text and the `events`, each with `eventId`, `actorId`, `role`, `text` and `createdAt`. A summary view keeps `viewId`, `name`, `visibility`, `groupBy`, `state`, `format`, `refreshMode` and `updatedAt`; its result keeps `viewId`, `status`, `stale`, the `text` or `data`, `computedAt`, `sourceMemoryCount`, `summarizedMemoryCount`, `truncated` and, when present, `sourceMemoryIds` and `errorCode`. Switch it off for the API's object as it came. The **Namespace** field of Namespace → Get, Update, Delete and Long-Term Memory → Move offers the store's namespaces from a list, or takes an ID or expression; the **View** field of Summary View does the same for the store's views.
 
 ## Credentials
 

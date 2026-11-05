@@ -11,6 +11,9 @@ export const SUMMARY_MESSAGE_ID = 'agent-memory-summary';
 /** Message ID used for the synthetic message carrying recalled long-term memories. */
 export const RECALL_MESSAGE_ID = 'agent-memory-recall';
 
+/** Message ID used for the synthetic message carrying a summary view's result. */
+export const SUMMARY_VIEW_MESSAGE_ID = 'agent-memory-summary-view';
+
 /**
  * Wire types for the Redis Agent Memory REST API (session memory subset).
  * Field names mirror the API's camelCase JSON. See the REST API reference:
@@ -59,6 +62,12 @@ export interface AgentMemoryRecord {
 interface AgentMemorySearchResponse {
 	items: AgentMemoryRecord[];
 	nextCursor?: string;
+}
+
+/** A summary view result, as far as the chat memory reads it. */
+interface AgentMemorySummaryViewResult {
+	status?: string;
+	value?: { text?: string; data?: unknown };
 }
 
 export interface AgentMemoryChatHistoryOptions {
@@ -201,6 +210,25 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 		);
 	}
 
+	/**
+	 * The summary a view holds for the configured user, as text, or undefined
+	 * when the server has not computed it yet (`status` other than `READY`),
+	 * it is empty, or the view no longer exists. The view must be grouped by
+	 * user; the server checks the scope. A structured summary is sent as JSON.
+	 */
+	async getSummaryViewText(viewId: string): Promise<string | undefined> {
+		const result = await this.options.request<AgentMemorySummaryViewResult>({
+			method: 'GET',
+			path: `/summary-views/${encodeURIComponent(viewId)}/result`,
+			qs: { ownerId: this.options.actorId },
+			allowNotFound: true,
+		});
+		if (result?.status !== 'READY') return undefined;
+		const text = result.value?.text?.trim();
+		if (text) return text;
+		return result.value?.data !== undefined ? JSON.stringify(result.value.data) : undefined;
+	}
+
 	async addMessage(message: Message): Promise<void> {
 		const role = toAgentMemoryRole[message.role];
 		// Tool results are not stored as session events.
@@ -253,6 +281,8 @@ export interface SummaryAwareWindowedChatMemoryOptions {
 	includeSummary: boolean;
 	/** When set, each load also searches long-term memory and prepends the results. */
 	recall?: { query: string; limit: number };
+	/** When set, each load also reads this summary view's result for the user and prepends it. */
+	summaryViewId?: string;
 }
 
 /**
@@ -280,13 +310,16 @@ export class SummaryAwareWindowedChatMemory extends BaseChatMemory {
 	}
 
 	async loadMessages(): Promise<Message[]> {
-		const { recall, includeSummary, windowSize } = this.memoryOptions;
+		const { recall, includeSummary, windowSize, summaryViewId } = this.memoryOptions;
 		const query = recall?.query.trim();
-		const [{ summary, messages }, recalled] = await Promise.all([
+		const [{ summary, messages }, recalled, briefing] = await Promise.all([
 			this.chatHistory.getSession(),
 			recall && query
 				? this.chatHistory.searchLongTermMemories(query, recall.limit)
 				: Promise.resolve([]),
+			summaryViewId
+				? this.chatHistory.getSummaryViewText(summaryViewId)
+				: Promise.resolve(undefined),
 		]);
 
 		const windowed = lastTurns(messages, windowSize).map(
@@ -304,6 +337,18 @@ export class SummaryAwareWindowedChatMemory extends BaseChatMemory {
 						text: `Long-term memories about the user, from earlier conversations:\n${recalled
 							.map((record) => `- ${record.text}`)
 							.join('\n')}`,
+					},
+				],
+			});
+		}
+		if (briefing) {
+			leading.push({
+				id: SUMMARY_VIEW_MESSAGE_ID,
+				role: 'user',
+				content: [
+					{
+						type: 'text',
+						text: `What is known about the user, summarized from earlier conversations:\n${briefing}`,
 					},
 				],
 			});

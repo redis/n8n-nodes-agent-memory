@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
 	IExecuteFunctions,
 	IHttpRequestOptions,
@@ -1055,6 +1055,495 @@ describe('RedisAgentMemory: Namespace locator', () => {
 
 		expect(requests).toHaveLength(10);
 		expect(result).toEqual({ results: [], paginationToken: 'p10' });
+	});
+});
+
+describe('RedisAgentMemory: Summary View', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	/** A result as the API returns it for a partition that was computed. */
+	const readyResult = {
+		viewId: 'sv-1',
+		scope: { ownerId: 'user-1' },
+		status: 'READY',
+		stale: false,
+		format: 'TEXT',
+		value: { text: 'Likes spicy food; lives in Sofia.' },
+		sourceMemoryCount: 2,
+		summarizedMemoryCount: 2,
+		truncated: false,
+		sourcesOmitted: false,
+		sourceContentTruncated: false,
+		sourceMemoryIds: ['m1', 'm2'],
+		computedAt: '2026-11-05T10:00:00Z',
+		definitionVersion: 1,
+	};
+
+	/** A view as the API returns it. */
+	const fullView = {
+		viewId: 'sv-1',
+		name: 'customer-briefing',
+		ownerId: '',
+		source: 'LONG_TERM',
+		groupBy: ['ownerId'],
+		visibility: 'PRIVATE',
+		output: { format: 'TEXT', instructions: 'Focus on preferences' },
+		refreshPolicy: { mode: 'MANUAL' },
+		evictionPolicy: { maxPartitions: 100 },
+		state: 'ACTIVE',
+		definitionVersion: 1,
+		createdAt: '2026-11-05T09:00:00Z',
+		updatedAt: '2026-11-05T09:30:00Z',
+	};
+
+	const simpleView = {
+		viewId: 'sv-1',
+		name: 'customer-briefing',
+		visibility: 'PRIVATE',
+		groupBy: ['ownerId'],
+		state: 'ACTIVE',
+		format: 'TEXT',
+		refreshMode: 'MANUAL',
+		updatedAt: '2026-11-05T09:30:00Z',
+	};
+
+	const getResult = {
+		resource: 'summaryView',
+		operation: 'getResult',
+		viewId: 'sv-1',
+		scope: { ownerId: 'user-1' },
+	};
+
+	it('offers the view of every operation but Create and Get Many from a list or as an ID', () => {
+		const { properties } = new RedisAgentMemory().description;
+		const locators = properties.filter((property) => property.name === 'viewId');
+
+		expect(locators).toHaveLength(1);
+		expect(locators[0]).toMatchObject({
+			displayName: 'View',
+			type: 'resourceLocator',
+			required: true,
+			displayOptions: {
+				show: {
+					resource: ['summaryView'],
+					operation: ['get', 'getResult', 'refresh', 'update', 'delete'],
+				},
+			},
+			modes: [
+				{
+					name: 'list',
+					type: 'list',
+					typeOptions: { searchListMethod: 'searchSummaryViews', searchable: true },
+				},
+				{ name: 'id', type: 'string' },
+			],
+		});
+	});
+
+	it("reads one partition's result with the scope as the query, and simplifies it", async () => {
+		const { output, requests } = await run({
+			parameters: {
+				...getResult,
+				scope: { ownerId: 'user-1', namespaceId: 'ns-1', sessionId: '', memoryType: ' ' },
+				options: { includeSourceMemoryIds: true },
+			},
+			respond: () => readyResult,
+		});
+
+		expect(requests).toEqual([
+			expect.objectContaining({
+				method: 'GET',
+				url: `${BASE}/summary-views/sv-1/result`,
+				qs: { ownerId: 'user-1', namespaceId: 'ns-1', includeSourceMemoryIds: true },
+			}),
+		]);
+		expect(output).toEqual([
+			{
+				viewId: 'sv-1',
+				status: 'READY',
+				stale: false,
+				text: 'Likes spicy food; lives in Sofia.',
+				computedAt: '2026-11-05T10:00:00Z',
+				sourceMemoryCount: 2,
+				summarizedMemoryCount: 2,
+				truncated: false,
+				sourceMemoryIds: ['m1', 'm2'],
+			},
+		]);
+	});
+
+	it('returns the raw result with Simplify off, and a structured value as data', async () => {
+		const structured = { ...readyResult, format: 'STRUCTURED', value: { data: { city: 'Sofia' } } };
+		const raw = await run({
+			parameters: { ...getResult, simple: false },
+			respond: () => structured,
+		});
+		expect(raw.output).toEqual([structured]);
+
+		const simple = await run({ parameters: getResult, respond: () => structured });
+		expect(simple.output[0]).toMatchObject({ status: 'READY', data: { city: 'Sofia' } });
+		expect(simple.output[0]).not.toHaveProperty('text');
+	});
+
+	it('returns a cold or failed result as an item, not an error', async () => {
+		const cold = await run({
+			parameters: getResult,
+			respond: () => ({ viewId: 'sv-1', status: 'COLD', stale: false, sourceMemoryCount: 0 }),
+		});
+		expect(cold.output).toEqual([
+			{ viewId: 'sv-1', status: 'COLD', stale: false, sourceMemoryCount: 0 },
+		]);
+
+		const failed = await run({
+			parameters: getResult,
+			respond: () => ({ viewId: 'sv-1', status: 'FAILED', errorCode: 'GENERATION_FAILED' }),
+		});
+		expect(failed.output).toEqual([
+			{ viewId: 'sv-1', status: 'FAILED', errorCode: 'GENERATION_FAILED' },
+		]);
+	});
+
+	it('with Wait For Result, asks every two seconds until the status settles', async () => {
+		vi.useFakeTimers();
+		const statuses = ['COLD', 'REFRESHING', 'READY'];
+		const askedAt: number[] = [];
+		const pending = run({
+			parameters: { ...getResult, waitForResult: true, maxWait: 60 },
+			respond: (_options, call) => {
+				askedAt.push(Date.now());
+				return statuses[call] === 'READY'
+					? readyResult
+					: { viewId: 'sv-1', status: statuses[call], stale: false };
+			},
+		});
+		await vi.runAllTimersAsync();
+
+		const { output, requests } = await pending;
+		expect(requests).toHaveLength(3);
+		expect(askedAt.map((t) => t - askedAt[0])).toEqual([0, 2_000, 4_000]);
+		expect(output[0]).toMatchObject({ status: 'READY', text: readyResult.value.text });
+	});
+
+	it('with Wait For Result, stops at EMPTY and at FAILED', async () => {
+		for (const status of ['EMPTY', 'FAILED']) {
+			vi.useFakeTimers();
+			const pending = run({
+				parameters: { ...getResult, waitForResult: true },
+				respond: (_options, call) => ({ viewId: 'sv-1', status: call === 0 ? 'PENDING' : status }),
+			});
+			await vi.runAllTimersAsync();
+			const { output, requests } = await pending;
+			expect(requests).toHaveLength(2);
+			expect(output).toEqual([{ viewId: 'sv-1', status }]);
+			vi.useRealTimers();
+		}
+	});
+
+	it('fails with the last status when Max Wait passes before the result settles', async () => {
+		vi.useFakeTimers();
+		const pending = run({
+			parameters: { ...getResult, waitForResult: true, maxWait: 5 },
+			respond: () => ({ viewId: 'sv-1', status: 'PENDING' }),
+		});
+		pending.catch(() => undefined);
+		await vi.runAllTimersAsync();
+
+		await expect(pending).rejects.toMatchObject({
+			message: 'The summary was not ready after 5 seconds (status PENDING)',
+			description:
+				'A manual-refresh view computes a summary only after Refresh. Run Refresh first, or raise Max Wait.',
+		});
+	});
+
+	it('refuses a Max Wait below 1 before calling the API', async () => {
+		const requests = await run({
+			parameters: { ...getResult, waitForResult: true, maxWait: 0 },
+		}).then(
+			(r) => r.requests,
+			(error: Error) => {
+				expect(error.message).toBe("'Max Wait' must be 1 or more");
+				return [];
+			},
+		);
+		expect(requests).toEqual([]);
+	});
+
+	it('refreshes a partition, or the whole view, and returns the accepted body', async () => {
+		const accepted = { viewId: 'sv-1', target: 'PARTITION', accepted: true };
+		const partition = await run({
+			parameters: {
+				resource: 'summaryView',
+				operation: 'refresh',
+				viewId: 'sv-1',
+				target: 'PARTITION',
+				scope: { ownerId: 'user-1' },
+			},
+			respond: () => accepted,
+		});
+		expect(partition.requests).toEqual([
+			expect.objectContaining({
+				method: 'POST',
+				url: `${BASE}/summary-views/sv-1/refresh`,
+				body: { target: 'PARTITION', scope: { ownerId: 'user-1' } },
+			}),
+		]);
+		expect(partition.output).toEqual([accepted]);
+
+		const full = await run({
+			parameters: {
+				resource: 'summaryView',
+				operation: 'refresh',
+				viewId: 'sv-1',
+				target: 'FULL',
+				scope: { ownerId: 'user-1' },
+			},
+			respond: () => ({ ...accepted, target: 'FULL' }),
+		});
+		expect(full.requests[0].body).toEqual({ target: 'FULL' });
+	});
+
+	it('with Wait For Result, Refresh returns the result it waited for', async () => {
+		vi.useFakeTimers();
+		const pending = run({
+			parameters: {
+				resource: 'summaryView',
+				operation: 'refresh',
+				viewId: 'sv-1',
+				target: 'PARTITION',
+				scope: { ownerId: 'user-1' },
+				waitForResult: true,
+			},
+			respond: (options, call) => {
+				if (options.method === 'POST')
+					return { viewId: 'sv-1', target: 'PARTITION', accepted: true };
+				return call === 1 ? { viewId: 'sv-1', status: 'REFRESHING' } : readyResult;
+			},
+		});
+		await vi.runAllTimersAsync();
+
+		const { output, requests } = await pending;
+		expect(requests.map((r) => `${r.method} ${r.url.slice(BASE.length)}`)).toEqual([
+			'POST /summary-views/sv-1/refresh',
+			'GET /summary-views/sv-1/result',
+			'GET /summary-views/sv-1/result',
+		]);
+		expect(requests[1].qs).toEqual({ ownerId: 'user-1' });
+		expect(output[0]).toMatchObject({ status: 'READY', text: readyResult.value.text });
+	});
+
+	it('creates a view from the top-level fields and Additional Fields', async () => {
+		const { output, requests } = await run({
+			parameters: {
+				resource: 'summaryView',
+				operation: 'create',
+				name: 'customer-briefing',
+				groupBy: ['ownerId', 'namespaceId'],
+				outputFormat: 'STRUCTURED',
+				instructions: 'Focus on preferences',
+				refreshMode: 'CONTINUOUS',
+				additionalFields: {
+					description: 'Per-customer briefing',
+					visibility: 'SHARED',
+					debounceSeconds: 30,
+					reconcileIntervalSeconds: 0,
+					maxPartitions: 500,
+					timeWindowSeconds: 86400,
+					schema: '{"fields":[{"name":"city","type":"string"}]}',
+					ownerId: '',
+					memoryType: 'semantic',
+					topics: 'food, travel',
+				},
+			},
+			respond: () => fullView,
+		});
+
+		expect(requests).toEqual([
+			expect.objectContaining({
+				method: 'POST',
+				url: `${BASE}/summary-views`,
+				body: {
+					source: 'LONG_TERM',
+					name: 'customer-briefing',
+					description: 'Per-customer briefing',
+					visibility: 'SHARED',
+					groupBy: ['ownerId', 'namespaceId'],
+					output: {
+						format: 'STRUCTURED',
+						instructions: 'Focus on preferences',
+						schema: { fields: [{ name: 'city', type: 'string' }] },
+					},
+					refreshPolicy: { mode: 'CONTINUOUS', debounceSeconds: 30 },
+					evictionPolicy: { maxPartitions: 500 },
+					timeWindowSeconds: 86400,
+					filter: { memoryType: { eq: 'semantic' }, topics: { in: ['food', 'travel'] } },
+				},
+			}),
+		]);
+		expect(output).toEqual([simpleView]);
+	});
+
+	it('sends only the required fields for a plain text view, and the raw record with Simplify off', async () => {
+		const { output, requests } = await run({
+			parameters: {
+				resource: 'summaryView',
+				operation: 'create',
+				name: 'briefing',
+				groupBy: ['ownerId'],
+				outputFormat: 'TEXT',
+				instructions: '',
+				refreshMode: 'MANUAL',
+				additionalFields: {},
+				simple: false,
+			},
+			respond: () => fullView,
+		});
+		expect(requests[0].body).toEqual({
+			source: 'LONG_TERM',
+			name: 'briefing',
+			groupBy: ['ownerId'],
+			output: { format: 'TEXT' },
+			refreshPolicy: { mode: 'MANUAL' },
+		});
+		expect(output).toEqual([fullView]);
+	});
+
+	it('refuses a Schema that is not a JSON object, and an empty Group By, before calling the API', async () => {
+		const create = {
+			resource: 'summaryView',
+			operation: 'create',
+			name: 'briefing',
+			groupBy: ['ownerId'],
+		};
+		for (const [parameters, message] of [
+			[{ ...create, additionalFields: { schema: '[not json' } }, "'Schema' is not a JSON object"],
+			[{ ...create, additionalFields: { schema: '"text"' } }, "'Schema' is not a JSON object"],
+			[{ ...create, groupBy: [] }, "'Group By' is empty"],
+		] as const) {
+			const requests = await run({ parameters }).then(
+				(r) => r.requests,
+				(error: Error) => {
+					expect(error.message).toBe(message);
+					return [];
+				},
+			);
+			expect(requests).toEqual([]);
+		}
+	});
+
+	it('gets, lists, updates and deletes views', async () => {
+		const got = await run({
+			parameters: { resource: 'summaryView', operation: 'get', viewId: 'sv-1' },
+			respond: () => fullView,
+		});
+		expect(got.requests[0]).toMatchObject({ method: 'GET', url: `${BASE}/summary-views/sv-1` });
+		expect(got.output).toEqual([simpleView]);
+
+		const listed = await run({
+			parameters: { resource: 'summaryView', operation: 'getAll', returnAll: false, limit: 3 },
+			respond: (options) =>
+				options.qs?.cursor
+					? { items: [{ ...fullView, viewId: 'sv-3' }] }
+					: { items: [fullView, { ...fullView, viewId: 'sv-2' }], nextCursor: 'p1' },
+		});
+		expect(listed.requests.map((r) => r.qs)).toEqual([{ limit: 3 }, { limit: 3, cursor: 'p1' }]);
+		expect(listed.output.map((v) => v.viewId)).toEqual(['sv-1', 'sv-2', 'sv-3']);
+		expect(listed.output[0]).toEqual(simpleView);
+
+		const updated = await run({
+			parameters: {
+				resource: 'summaryView',
+				operation: 'update',
+				viewId: 'sv-1',
+				updateFields: {
+					name: 'renamed',
+					state: 'DISABLED',
+					clearFilter: true,
+					clearTimeWindow: false,
+					instructions: 'Shorter',
+					refreshMode: 'MANUAL',
+					maxPartitions: 0,
+				},
+			},
+			respond: () => ({ ...fullView, name: 'renamed', state: 'DISABLED' }),
+		});
+		expect(updated.requests[0]).toMatchObject({
+			method: 'PATCH',
+			url: `${BASE}/summary-views/sv-1`,
+			body: {
+				name: 'renamed',
+				state: 'DISABLED',
+				clearFilter: true,
+				output: { instructions: 'Shorter' },
+				refreshPolicy: { mode: 'MANUAL' },
+			},
+		});
+		expect(updated.output).toEqual([{ ...simpleView, name: 'renamed', state: 'DISABLED' }]);
+
+		const deleted = await run({
+			parameters: { resource: 'summaryView', operation: 'delete', viewId: 'sv-1' },
+			respond: () => ({ viewId: 'sv-1', state: 'DELETING' }),
+		});
+		expect(deleted.requests[0]).toMatchObject({
+			method: 'DELETE',
+			url: `${BASE}/summary-views/sv-1`,
+		});
+		expect(deleted.output).toEqual([{ deleted: true, viewId: 'sv-1' }]);
+	});
+
+	it('refuses an update with no Update Fields before calling the API', async () => {
+		const requests = await run({
+			parameters: {
+				resource: 'summaryView',
+				operation: 'update',
+				viewId: 'sv-1',
+				updateFields: { name: '', clearFilter: false, maxPartitions: 0 },
+			},
+		}).then(
+			(r) => r.requests,
+			(error: Error) => {
+				expect(error.message).toBe("'Update Fields' is empty");
+				return [];
+			},
+		);
+		expect(requests).toEqual([]);
+	});
+
+	it('lists views for the View locator by name, with the ID as the value', async () => {
+		const requests: IHttpRequestOptions[] = [];
+		const ctx = {
+			getNode: () => NODE,
+			getCredentials: async () => ({
+				serverUrl: 'https://memory.example.com',
+				storeId: 'store-1',
+				apiKey: 'secret',
+			}),
+			helpers: {
+				async httpRequestWithAuthentication(_credentialType: string, options: IHttpRequestOptions) {
+					requests.push(options);
+					if (options.qs?.cursor) return { items: [] };
+					return {
+						items: [fullView, { ...fullView, viewId: 'sv-2', name: 'weekly-digest' }],
+						nextCursor: 'p1',
+					};
+				},
+			},
+		} as unknown as ILoadOptionsFunctions;
+		const { searchSummaryViews } = new RedisAgentMemory().methods.listSearch;
+
+		const all = await searchSummaryViews.call(ctx);
+		expect(requests[0]).toMatchObject({ url: `${BASE}/summary-views`, qs: { limit: 100 } });
+		expect(all).toEqual({
+			results: [
+				{ name: 'customer-briefing', value: 'sv-1' },
+				{ name: 'weekly-digest', value: 'sv-2' },
+			],
+			paginationToken: 'p1',
+		});
+
+		const filtered = await searchSummaryViews.call(ctx, 'DIGEST');
+		expect(filtered.results).toEqual([{ name: 'weekly-digest', value: 'sv-2' }]);
 	});
 });
 
