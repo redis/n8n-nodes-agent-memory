@@ -140,4 +140,5 @@ version.
 Releases are published to npm **only** from GitHub Actions ([`.github/workflows/publish.yml`](.github/workflows/publish.yml)) with npm provenance. n8n requires this for verification from 1 May 2026.
 
 1. Configure npm Trusted Publishing for `redis/n8n-nodes-agent-memory` → `publish.yml`, or set an `NPM_TOKEN` secret.
-2. Run `npm run release` locally. It bumps the version, updates the changelog and pushes a tag. The tag triggers the publish workflow.
+2. Before releasing, move the entries under `## Unreleased` in `CHANGELOG.md` to a heading for the new version. `npm run release` does not edit that file: release-it's `auto-changelog` step writes to the ignored `.auto-changelog.md` (see `.auto-changelog`), and the GitHub release notes it generates are a commit list.
+3. In a checkout whose `origin` is `redis/n8n-nodes-agent-memory`, with dependencies installed (`npm ci`) and a `GITHUB_TOKEN` in the environment for the GitHub release, run `npm run release`. It lints, builds, bumps the version, commits, tags and pushes; the tag triggers the publish workflow, which publishes with provenance.

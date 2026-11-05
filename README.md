@@ -89,13 +89,13 @@ One node with two faces. In the node list it is **Redis Agent Memory**, an actio
 
 Never let the model fill **User ID**: that is what keeps one user's memories away from another. Extraction is asynchronous, so a fact said in this turn may not be searchable until the next one.
 
-**Output and namespaces.** Every operation that returns records has a **Simplify** switch, on by default. A memory keeps `id`, `text`, `ownerId`, `memoryType`, `topics`, `namespaceId`, `sessionId` and `createdAt`; a namespace keeps `namespaceId`, `name`, `scope`, `state`, `parentId` and `ownerId`; Session → Get keeps `sessionId`, `ownerId`, `namespaceId`, the `summary` text and the `events`, each with `eventId`, `actorId`, `role`, `text` and `createdAt`. Switch it off for the API's object as it came. The **Namespace** field of Namespace → Get, Update, Delete and Long-Term Memory → Move offers the store's namespaces from a list, or takes an ID or expression.
+**Output and namespaces.** Every operation that returns records has a **Simplify** switch, on by default. A memory keeps `memoryId`, `text`, `ownerId`, `memoryType`, `topics`, `namespaceId`, `sessionId` and `createdAt`; a namespace keeps `namespaceId`, `name`, `scope`, `state`, `parentId` and `ownerId`; Session → Get keeps `sessionId`, `ownerId`, `namespaceId`, the `summary` text and the `events`, each with `eventId`, `actorId`, `role`, `text` and `createdAt`. Switch it off for the API's object as it came. The **Namespace** field of Namespace → Get, Update, Delete and Long-Term Memory → Move offers the store's namespaces from a list, or takes an ID or expression.
 
 ## Credentials
 
 Create a **Redis Agent Memory API** credential with:
 
-- **Server URL**: found in the `AI Services / Iris / Agent Memory` page, `Configuration` tab, `General Settings` section
+- **Server URL**: found in the `AI Services / Iris / Agent Memory` page, `Configuration` tab, `General Settings` section. Enter the host only (`https://…`), without a path: the nodes add `/iris/data/v1/agent-memory` themselves.
 - **Store ID**: found in the `AI Services / Iris / Agent Memory` page, `Configuration` tab, `General Settings` section
 - **API Key**: found in the `AI Services / Iris / Agent Memory` page, `API Keys` tab
 

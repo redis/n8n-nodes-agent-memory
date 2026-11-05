@@ -52,13 +52,13 @@ describe('createAgentMemoryRequest', () => {
 		const request = await requestThatThrows(httpError(404, SESSION_NOT_FOUND));
 
 		await expect(
-			request({ method: 'GET', path: '/session-memory/s-1', allowNotFound: true }),
+			request({ method: 'GET', path: '/sessions/s-1', allowNotFound: true }),
 		).resolves.toBeUndefined();
 	});
 
 	it("rethrows the API's not-found when the caller does not allow it", async () => {
 		const request = await requestThatThrows(httpError(404, SESSION_NOT_FOUND));
-		const call = request({ method: 'GET', path: '/session-memory/s-1' });
+		const call = request({ method: 'GET', path: '/sessions/s-1' });
 
 		await expect(call).rejects.toBeInstanceOf(NodeApiError);
 		await expect(call).rejects.toMatchObject({ httpCode: '404' });
@@ -67,7 +67,7 @@ describe('createAgentMemoryRequest', () => {
 	it('rethrows a 404 whose body is not the API not-found, even when allowed', async () => {
 		// An unknown path, or a proxy in front of the store, answers with text.
 		const request = await requestThatThrows(httpError(404, '404 page not found'));
-		const call = request({ method: 'GET', path: '/session-memory/s-1', allowNotFound: true });
+		const call = request({ method: 'GET', path: '/sessions/s-1', allowNotFound: true });
 
 		await expect(call).rejects.toBeInstanceOf(NodeApiError);
 		await expect(call).rejects.toMatchObject({ httpCode: '404' });
@@ -79,13 +79,13 @@ describe('createAgentMemoryRequest', () => {
 		);
 
 		await expect(
-			request({ method: 'GET', path: '/session-memory/s-1', allowNotFound: true }),
+			request({ method: 'GET', path: '/sessions/s-1', allowNotFound: true }),
 		).rejects.toMatchObject({ httpCode: '404' });
 	});
 
 	it('wraps other failures as NodeApiError with the status and the item index', async () => {
 		const request = await requestThatThrows(httpError(401));
-		const call = request({ method: 'GET', path: '/session-memory/s-1', allowNotFound: true });
+		const call = request({ method: 'GET', path: '/sessions/s-1', allowNotFound: true });
 
 		await expect(call).rejects.toBeInstanceOf(NodeApiError);
 		await expect(call).rejects.toMatchObject({
@@ -100,9 +100,7 @@ describe('createAgentMemoryRequest', () => {
 		const wrapped = new NodeApiError(NODE, httpError(500) as unknown as JsonObject);
 		const request = await requestThatThrows(wrapped);
 
-		const error = await request({ method: 'GET', path: '/session-memory/s-1' }).catch(
-			(e: unknown) => e,
-		);
+		const error = await request({ method: 'GET', path: '/sessions/s-1' }).catch((e: unknown) => e);
 
 		expect(error).toBe(wrapped);
 		expect(wrapped.context.itemIndex).toBe(ITEM_INDEX);
@@ -127,7 +125,7 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 	it("uses the API's detail as the message and its title as the description", async () => {
 		const request = await requestThatThrows(httpError(400, MEMORY_TYPE_REFUSED));
 
-		await expect(request({ method: 'POST', path: '/long-term-memory' })).rejects.toMatchObject({
+		await expect(request({ method: 'POST', path: '/memories' })).rejects.toMatchObject({
 			httpCode: '400',
 			message: 'memories[0]: memory type "SEMANTIC" is not registered on this store',
 			description: 'Invalid Request (HTTP 400)',
@@ -138,7 +136,7 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 	it('names the missing resource for a not-found the caller does not allow', async () => {
 		const request = await requestThatThrows(httpError(404, SESSION_NOT_FOUND));
 
-		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+		await expect(request({ method: 'GET', path: '/sessions/s-1' })).rejects.toMatchObject({
 			httpCode: '404',
 			message: 'The requested session was not found',
 			description: 'Session Not Found (HTTP 404)',
@@ -161,7 +159,7 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 		// A proxy or the gateway answers with text or HTML; nothing to quote.
 		const request = await requestThatThrows(httpError(404, '404 page not found'));
 
-		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+		await expect(request({ method: 'GET', path: '/sessions/s-1' })).rejects.toMatchObject({
 			httpCode: '404',
 			message: 'The resource you are requesting could not be found',
 		});
@@ -178,7 +176,7 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 			httpError(403, '<html><body><h1>403 Forbidden</h1></body></html>'),
 		);
 
-		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+		await expect(request({ method: 'GET', path: '/sessions/s-1' })).rejects.toMatchObject({
 			httpCode: '403',
 			message: 'Forbidden - perhaps check your credentials?',
 			description: GATEWAY_FORBIDDEN_DESCRIPTION,
@@ -188,7 +186,7 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 	it('tells the user to check the URL and store too for a gateway 403 with no body', async () => {
 		const request = await requestThatThrows(httpError(403));
 
-		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+		await expect(request({ method: 'GET', path: '/sessions/s-1' })).rejects.toMatchObject({
 			httpCode: '403',
 			description: GATEWAY_FORBIDDEN_DESCRIPTION,
 		});
@@ -204,7 +202,7 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 			}),
 		);
 
-		await expect(request({ method: 'GET', path: '/session-memory/s-1' })).rejects.toMatchObject({
+		await expect(request({ method: 'GET', path: '/sessions/s-1' })).rejects.toMatchObject({
 			httpCode: '403',
 			message: 'The key cannot write to this store',
 			description: 'Forbidden (HTTP 403)',
@@ -218,9 +216,7 @@ describe('createAgentMemoryRequest: Problem Details', () => {
 		);
 		const request = await requestThatThrows(wrapped);
 
-		const error = await request({ method: 'POST', path: '/long-term-memory' }).catch(
-			(e: unknown) => e,
-		);
+		const error = await request({ method: 'POST', path: '/memories' }).catch((e: unknown) => e);
 
 		expect(error).toBe(wrapped);
 		expect(wrapped.message).toBe(

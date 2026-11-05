@@ -1,7 +1,7 @@
 import { BaseChatHistory, BaseChatMemory, type Message } from '@n8n/ai-node-sdk';
 import type { INode } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
-import type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
+import { newIdempotencyKey, type AgentMemoryRequest } from '../shared/agentMemoryRequest';
 
 export type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
 
@@ -49,7 +49,7 @@ export interface AgentMemorySessionResponse {
 
 /** A long-term memory record, as far as recall reads it. */
 export interface AgentMemoryRecord {
-	id: string;
+	memoryId: string;
 	text: string;
 	ownerId?: string;
 	memoryType?: string;
@@ -58,7 +58,7 @@ export interface AgentMemoryRecord {
 
 interface AgentMemorySearchResponse {
 	items: AgentMemoryRecord[];
-	nextPageToken?: string;
+	nextCursor?: string;
 }
 
 export interface AgentMemoryChatHistoryOptions {
@@ -136,7 +136,7 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 	}
 
 	private get sessionPath(): string {
-		return `/session-memory/${encodeURIComponent(this.options.sessionId)}`;
+		return `/sessions/${encodeURIComponent(this.options.sessionId)}`;
 	}
 
 	async getSession(): Promise<AgentMemorySession> {
@@ -184,13 +184,13 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 	async searchLongTermMemories(query: string, limit: number): Promise<AgentMemoryRecord[]> {
 		const response = await this.options.request<AgentMemorySearchResponse>({
 			method: 'POST',
-			path: '/long-term-memory/search',
+			path: '/memories/search',
 			body: {
-				text: query,
+				query,
 				limit,
 				filter: {
 					ownerId: { eq: this.options.actorId },
-					...(this.options.namespaceId ? { namespaceRef: { eq: this.options.namespaceId } } : {}),
+					...(this.options.namespaceId ? { namespaceId: { eq: this.options.namespaceId } } : {}),
 				},
 			},
 		});
@@ -224,18 +224,17 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 		// session yet, so the owner check needs one read first.
 		if (this.options.verifyOwner && !this.ownerChecked) await this.getSession();
 
+		// The server creates the session on its first event.
 		await this.options.request({
 			method: 'POST',
-			path: '/session-memory/events',
+			path: `${this.sessionPath}/events`,
 			body: {
-				sessionId: this.options.sessionId,
+				idempotencyKey: newIdempotencyKey(),
 				actorId: this.options.actorId,
 				role,
 				content,
 				createdAt: new Date().toISOString(),
-				...(this.options.namespaceId
-					? { namespaceRef: { namespaceId: this.options.namespaceId } }
-					: {}),
+				...(this.options.namespaceId ? { namespaceId: this.options.namespaceId } : {}),
 			},
 		});
 	}

@@ -109,7 +109,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 
 		const { status, body } = await client.probe(
 			'GET',
-			`/session-memory/${encodeURIComponent(sessionId)}`,
+			`/sessions/${encodeURIComponent(sessionId)}`,
 		);
 
 		expect(status).toBe(404);
@@ -123,10 +123,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 	it('deletes a missing session with 204, not 404', async () => {
 		const { sessionId } = newSession();
 
-		const { status } = await client.probe(
-			'DELETE',
-			`/session-memory/${encodeURIComponent(sessionId)}`,
-		);
+		const { status } = await client.probe('DELETE', `/sessions/${encodeURIComponent(sessionId)}`);
 
 		expect(status).toBe(204);
 	});
@@ -249,11 +246,15 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 		const other = newSession();
 		const created = await client.request<{ created: string[] }>({
 			method: 'POST',
-			path: '/long-term-memory',
+			path: '/memories',
 			body: {
 				memories: [
-					{ id: `${actorId}-m1`, ownerId: actorId, text: 'The user is vegetarian' },
-					{ id: `${other.actorId}-m1`, ownerId: other.actorId, text: 'The user eats steak daily' },
+					{ memoryId: `${actorId}-m1`, ownerId: actorId, text: 'The user is vegetarian' },
+					{
+						memoryId: `${other.actorId}-m1`,
+						ownerId: other.actorId,
+						text: 'The user eats steak daily',
+					},
 				],
 			},
 		});

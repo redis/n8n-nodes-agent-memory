@@ -6,14 +6,22 @@ import type {
 	JsonObject,
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
+import { randomUUID } from 'crypto';
 
 export const AGENT_MEMORY_CREDENTIAL = 'redisAgentMemoryApi';
+
+/**
+ * Path prefix of the Agent Memory data-plane API (the "unified Iris API").
+ * Every request goes to `{serverUrl}/iris/data/v1/agent-memory/stores/{storeId}/...`.
+ */
+export const AGENT_MEMORY_API_PREFIX = '/iris/data/v1/agent-memory';
 
 /**
  * Problem type the API puts in every not-found body (`{ type, title, status,
  * detail }`). It is the same for a missing session, memory or namespace; only
  * `title` names the resource. A wrong store or URL never produces it: the
- * gateway answers those with a 403, and an unknown path with a plain-text 404.
+ * gateway answers those with a 403, and an unknown path with an empty or
+ * plain-text 404.
  */
 export const NOT_FOUND_ERROR_TYPE = '/errors/resource-not-found';
 
@@ -24,14 +32,31 @@ const PROBLEM_TYPE_PREFIX = '/errors/';
  * Description for a 403 that does not come from the API. The gateway in front
  * of the hosted store refuses a wrong key, a wrong store and an extra path
  * segment in the URL alike, with an HTML page; n8n's own text names only the
- * credentials.
+ * credentials. (A key that may read but not write gets a 403 from the API
+ * itself, with Problem Details, which `describeProblem` handles.)
  */
 export const GATEWAY_FORBIDDEN_DESCRIPTION =
 	'The gateway refused the request. Check the API Key, and also the Server URL and Store ID: a wrong store or an extra path segment is refused the same way.';
 
+/**
+ * Description for a 404 that does not come from the API. The server answers a
+ * path it does not route with an empty or plain-text 404; the usual cause is a
+ * Server URL that already carries a path, or a server on an older API.
+ */
+export const NOT_ROUTED_DESCRIPTION = `The server did not route the request. Check the Server URL: it must be the host only, and the nodes add ${AGENT_MEMORY_API_PREFIX}/stores/{storeId} themselves.`;
+
+/**
+ * A fresh key for a write. The API takes one on every create and update; a
+ * store with ingestion hooks requires it, and a new key per request never
+ * collides with an earlier one.
+ */
+export function newIdempotencyKey(): string {
+	return randomUUID();
+}
+
 export interface AgentMemoryRequestOptions {
-	method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
-	/** Path below `/v1/stores/{storeId}`, starting with a slash. */
+	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+	/** Path below `/iris/data/v1/agent-memory/stores/{storeId}`, starting with a slash. */
 	path: string;
 	body?: object;
 	qs?: Record<string, string | number | boolean>;
@@ -60,7 +85,7 @@ export async function createAgentMemoryRequest(
 	const credentials = await context.getCredentials<{ serverUrl: string; storeId: string }>(
 		AGENT_MEMORY_CREDENTIAL,
 	);
-	const baseUrl = `${credentials.serverUrl.replace(/\/+$/, '')}/v1/stores/${encodeURIComponent(
+	const baseUrl = `${credentials.serverUrl.replace(/\/+$/, '')}${AGENT_MEMORY_API_PREFIX}/stores/${encodeURIComponent(
 		credentials.storeId,
 	)}`;
 
@@ -87,6 +112,8 @@ export async function createAgentMemoryRequest(
 			if (problem) describeProblem(apiError, problem);
 			else if (String(apiError.httpCode) === '403') {
 				apiError.description = GATEWAY_FORBIDDEN_DESCRIPTION;
+			} else if (String(apiError.httpCode) === '404') {
+				apiError.description = NOT_ROUTED_DESCRIPTION;
 			}
 			throw apiError;
 		}

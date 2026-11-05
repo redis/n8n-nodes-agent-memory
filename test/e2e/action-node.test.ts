@@ -27,7 +27,7 @@ interface StoredEvent {
 }
 
 interface Memory {
-	id: string;
+	memoryId: string;
 	text: string;
 	ownerId: string;
 }
@@ -82,13 +82,13 @@ describe.skipIf(!agentMemoryConfig)(
 
 		/** Creates memories straight on the store, so a test has data without the node. */
 		async function createMemories(memories: Array<Memory & { topics?: string[] }>): Promise<void> {
-			await client.request({ method: 'POST', path: '/long-term-memory', body: { memories } });
+			await client.request({ method: 'POST', path: '/memories', body: { memories } });
 		}
 
-		async function getMemory(id: string): Promise<Memory | undefined> {
+		async function getMemory(memoryId: string): Promise<Memory | undefined> {
 			return await client.request<Memory>({
 				method: 'GET',
-				path: `/long-term-memory/${encodeURIComponent(id)}`,
+				path: `/memories/${encodeURIComponent(memoryId)}`,
 				allowNotFound: true,
 			});
 		}
@@ -166,35 +166,35 @@ describe.skipIf(!agentMemoryConfig)(
 			const otherUserId = `${runPrefix}-action-user-3`;
 			client.track(`${runPrefix}-unused`, userId);
 
-			const [created] = await callAction<{ id: string; text: string; ownerId: string }>(
-				'e2e-action-memory-create',
-				{ userId, text: 'The user is allergic to peanuts' },
-			);
+			const [created] = await callAction<Memory>('e2e-action-memory-create', {
+				userId,
+				text: 'The user is allergic to peanuts',
+			});
 			expect(created).toMatchObject({ text: 'The user is allergic to peanuts', ownerId: userId });
-			expect(created.id).toMatch(/^n8n-/);
+			expect(created.memoryId).toMatch(/^n8n-/);
 
-			const found = await callAction<{ id: string; text: string }>('e2e-action-memory-search', {
+			const found = await callAction<Memory>('e2e-action-memory-search', {
 				userId,
 				query: 'Does the user have any allergies?',
 			});
-			expect(found.map((m) => m.id)).toContain(created.id);
+			expect(found.map((m) => m.memoryId)).toContain(created.memoryId);
 
-			const foundForOther = await callAction<{ id: string }>('e2e-action-memory-search', {
+			const foundForOther = await callAction<Memory>('e2e-action-memory-search', {
 				userId: otherUserId,
 				query: 'Does the user have any allergies?',
 			});
 			expect(foundForOther).toEqual([]);
 
-			const [deleted] = await callAction<{ deleted: boolean; id: string }>(
+			const [deleted] = await callAction<{ deleted: boolean; memoryId: string }>(
 				'e2e-action-memory-delete',
-				{ memoryId: created.id },
+				{ memoryId: created.memoryId },
 			);
-			expect(deleted).toEqual({ deleted: true, id: created.id });
-			const afterDelete = await callAction<{ id: string }>('e2e-action-memory-search', {
+			expect(deleted).toEqual({ deleted: true, memoryId: created.memoryId });
+			const afterDelete = await callAction<Memory>('e2e-action-memory-search', {
 				userId,
 				query: 'Does the user have any allergies?',
 			});
-			expect(afterDelete.map((m) => m.id)).not.toContain(created.id);
+			expect(afterDelete.map((m) => m.memoryId)).not.toContain(created.memoryId);
 		});
 
 		it('returns simplified records by default and the raw API objects with Simplify off', async () => {
@@ -208,29 +208,35 @@ describe.skipIf(!agentMemoryConfig)(
 				namespaceId,
 			});
 			expect(created).toEqual({
-				id: expect.stringMatching(/^n8n-/),
+				memoryId: expect.stringMatching(/^n8n-/),
 				text: 'The user drinks oat milk',
 				ownerId: userId,
 				namespaceId,
 			});
 
+			// With Simplify off, the API's record comes through: the same flat
+			// `namespaceId`, plus the bookkeeping fields Simplify drops.
 			const [raw] = await callAction<Record<string, unknown>>('e2e-action-memory-get', {
-				memoryId: created.id,
+				memoryId: created.memoryId,
 				simple: false,
 			});
-			expect(raw).toMatchObject({ id: created.id, namespaceRef: { namespaceId } });
-			expect(raw).not.toHaveProperty('namespaceId');
+			expect(raw).toMatchObject({
+				memoryId: created.memoryId,
+				namespaceId,
+				revision: expect.any(String),
+				updatedAt: expect.any(String),
+			});
 
 			// The Namespace locator in ID mode, fed by an expression.
 			const [moved] = await callAction<Record<string, unknown>>('e2e-action-memory-move', {
-				memoryId: created.id,
+				memoryId: created.memoryId,
 				namespaceId: targetId,
 			});
-			expect(moved).toEqual({ moved: true, id: created.id, namespaceId: targetId });
+			expect(moved).toEqual({ moved: true, memoryId: created.memoryId, namespaceId: targetId });
 			const [afterMove] = await callAction<Record<string, unknown>>('e2e-action-memory-get', {
-				memoryId: created.id,
+				memoryId: created.memoryId,
 			});
-			expect(afterMove).toMatchObject({ id: created.id, namespaceId: targetId });
+			expect(afterMove).toMatchObject({ memoryId: created.memoryId, namespaceId: targetId });
 
 			const [namespace] = await callAction<Record<string, unknown>>('e2e-action-namespace-get', {
 				namespaceId,
@@ -303,8 +309,11 @@ describe.skipIf(!agentMemoryConfig)(
 					nodeName: 'Action: event-add',
 					type: 'NodeApiError',
 					httpCode: '400',
-					message:
-						'SessionID: must contain only alphanumeric characters (A-Z, a-z, 0-9) and hyphens (-).',
+					// The server's own wording; it names the allowed characters, which
+					// have changed once already (underscores were added on the Iris API).
+					message: expect.stringMatching(
+						/^SessionID: must contain only alphanumeric characters \(A-Z, a-z, 0-9\).*hyphens \(-\)\.$/,
+					) as string,
 					description: 'Invalid Request (HTTP 400)',
 				});
 			});
@@ -318,8 +327,13 @@ describe.skipIf(!agentMemoryConfig)(
 				const own = `${runPrefix}-action-filter-own`;
 				const theirs = `${runPrefix}-action-filter-theirs`;
 				await createMemories([
-					{ id: own, ownerId: userId, text: 'The user drinks tea', topics: ['drinks'] },
-					{ id: theirs, ownerId: otherUserId, text: 'The user drinks coffee', topics: ['drinks'] },
+					{ memoryId: own, ownerId: userId, text: 'The user drinks tea', topics: ['drinks'] },
+					{
+						memoryId: theirs,
+						ownerId: otherUserId,
+						text: 'The user drinks coffee',
+						topics: ['drinks'],
+					},
 				]);
 
 				const found = await callAction<Memory>('e2e-action-memory-search', {
@@ -329,8 +343,8 @@ describe.skipIf(!agentMemoryConfig)(
 					topics: 'drinks',
 				});
 
-				expect(found.map((m) => m.id)).toContain(own);
-				expect(found.map((m) => m.id)).not.toContain(theirs);
+				expect(found.map((m) => m.memoryId)).toContain(own);
+				expect(found.map((m) => m.memoryId)).not.toContain(theirs);
 				expect(found.every((m) => m.ownerId === userId)).toBe(true);
 			});
 
@@ -371,7 +385,7 @@ describe.skipIf(!agentMemoryConfig)(
 			// the node now refuses them itself, before any request.
 			it('refuses an empty filter, empty update fields and a personal namespace without a user', async () => {
 				const memoryId = `${runPrefix}-action-unchanged`;
-				await createMemories([{ id: memoryId, ownerId: newUser('unchanged'), text: 'Likes tea' }]);
+				await createMemories([{ memoryId, ownerId: newUser('unchanged'), text: 'Likes tea' }]);
 				const namespaceId = await createNamespace('unchanged');
 
 				const noFilter = await failingAction('e2e-action-memory-list', {});

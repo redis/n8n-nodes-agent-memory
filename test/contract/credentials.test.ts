@@ -17,6 +17,6 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory credential test contract ${ski
 		const body = (await response.json()) as { status?: string };
 
 		expect(response.status).toBe(200);
-		expect(body.status).toBe('healthy');
+		expect(body.status).toBe('HEALTHY');
 	});
 });

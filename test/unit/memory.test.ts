@@ -45,7 +45,8 @@ function history(request: AgentMemoryRequest, namespaceId?: string) {
 	});
 }
 
-const SESSION_PATH = '/session-memory/session%201%2Fa';
+const SESSION_PATH = '/sessions/session%201%2Fa';
+const EVENTS_PATH = `${SESSION_PATH}/events`;
 
 function text(message: Message): string {
 	return message.content.map((part) => (part.type === 'text' ? part.text : '')).join('');
@@ -135,19 +136,32 @@ describe('AgentMemoryChatHistory', () => {
 			});
 
 			expect(calls).toHaveLength(1);
+			// The session is in the path; the body names the actor, not the session.
 			expect(calls[0]).toMatchObject({
 				method: 'POST',
-				path: '/session-memory/events',
+				path: EVENTS_PATH,
 				body: {
-					sessionId: 'session 1/a',
+					idempotencyKey: expect.any(String) as string,
 					actorId: 'user-1',
 					role: 'USER',
 					content: [{ text: 'Hi' }],
 				},
 			});
-			const body = calls[0].body as { createdAt: string; namespaceRef?: unknown };
+			const body = calls[0].body as { createdAt: string };
 			expect(Number.isNaN(Date.parse(body.createdAt))).toBe(false);
-			expect(body).not.toHaveProperty('namespaceRef');
+			expect(body).not.toHaveProperty('sessionId');
+			expect(body).not.toHaveProperty('namespaceId');
+		});
+
+		it('sends a different idempotency key with every event', async () => {
+			const { request, calls } = fakeRequest();
+			const message: Message = { role: 'user', content: [{ type: 'text', text: 'Hi' }] };
+
+			await history(request).addMessages([message, message]);
+
+			const keys = calls.map((call) => (call.body as { idempotencyKey: string }).idempotencyKey);
+			expect(keys).toHaveLength(2);
+			expect(keys[0]).not.toBe(keys[1]);
 		});
 
 		it.each([
@@ -169,7 +183,7 @@ describe('AgentMemoryChatHistory', () => {
 				content: [{ type: 'text', text: 'Hi' }],
 			});
 
-			expect(calls[0].body).toMatchObject({ namespaceRef: { namespaceId: 'ns-product' } });
+			expect(calls[0].body).toMatchObject({ namespaceId: 'ns-product' });
 		});
 
 		it('keeps only non-empty text parts', async () => {
@@ -292,8 +306,8 @@ describe('SummaryAwareWindowedChatMemory', () => {
 		await memory.clear();
 
 		expect(calls.map((c) => [c.method, c.path])).toEqual([
-			['POST', '/session-memory/events'],
-			['POST', '/session-memory/events'],
+			['POST', EVENTS_PATH],
+			['POST', EVENTS_PATH],
 			['DELETE', SESSION_PATH],
 		]);
 		expect(calls.slice(0, 2).map((c) => c.body)).toMatchObject([
@@ -343,12 +357,13 @@ describe('SummaryAwareWindowedChatMemory', () => {
 });
 
 /**
- * A real `GET …/session-memory/{sessionId}` response, recorded on 2026-11-02
- * after 40 events: the server kept the last 20 and summarized the first 20.
- * Pins the wire shape the fake responses above only assume.
+ * A real session response, recorded on 2026-11-02 after 40 events: the server
+ * kept the last 20 and summarized the first 20. The session and summary shape
+ * is unchanged on the unified Iris API (`GET …/sessions/{sessionId}`). Pins the
+ * wire shape the fake responses above only assume.
  */
 describe('recorded session with a server summary', () => {
-	const path = `/session-memory/${encodeURIComponent(recordedSession.sessionId)}`;
+	const path = `/sessions/${encodeURIComponent(recordedSession.sessionId)}`;
 
 	function recorded() {
 		const { request } = fakeRequest({ [`GET ${path}`]: recordedSession });
@@ -492,10 +507,10 @@ describe('SummaryAwareWindowedChatMemory with recall', () => {
 		},
 	};
 	const found = {
-		'POST /long-term-memory/search': {
+		'POST /memories/search': {
 			items: [
-				{ id: 'm1', text: 'The user is vegetarian' },
-				{ id: 'm2', text: 'The user lives in Sofia' },
+				{ memoryId: 'm1', text: 'The user is vegetarian' },
+				{ memoryId: 'm2', text: 'The user lives in Sofia' },
 			],
 		},
 	};
@@ -510,13 +525,13 @@ describe('SummaryAwareWindowedChatMemory with recall', () => {
 
 		const messages = await memory.loadMessages();
 
-		const search = calls.find((call) => call.path === '/long-term-memory/search');
+		const search = calls.find((call) => call.path === '/memories/search');
 		expect(search).toMatchObject({
 			method: 'POST',
 			body: {
-				text: 'What should I cook?',
+				query: 'What should I cook?',
 				limit: 5,
-				filter: { ownerId: { eq: 'user-1' }, namespaceRef: { eq: 'ns-1' } },
+				filter: { ownerId: { eq: 'user-1' }, namespaceId: { eq: 'ns-1' } },
 			},
 		});
 		expect(messages.map((m) => m.id)).toEqual([RECALL_MESSAGE_ID, SUMMARY_MESSAGE_ID, 'e1']);
@@ -527,7 +542,7 @@ describe('SummaryAwareWindowedChatMemory with recall', () => {
 	});
 
 	it('adds nothing when the search finds nothing', async () => {
-		const { request } = fakeRequest({ ...session, 'POST /long-term-memory/search': { items: [] } });
+		const { request } = fakeRequest({ ...session, 'POST /memories/search': { items: [] } });
 		const memory = new SummaryAwareWindowedChatMemory(history(request), {
 			windowSize: 10,
 			includeSummary: false,
@@ -565,10 +580,10 @@ describe('SummaryAwareWindowedChatMemory with recall', () => {
 	it('drops a recalled memory that belongs to another user', async () => {
 		const { request } = fakeRequest({
 			...session,
-			'POST /long-term-memory/search': {
+			'POST /memories/search': {
 				items: [
-					{ id: 'm1', text: 'Mine', ownerId: 'user-1' },
-					{ id: 'm2', text: 'Theirs', ownerId: 'user-2' },
+					{ memoryId: 'm1', text: 'Mine', ownerId: 'user-1' },
+					{ memoryId: 'm2', text: 'Theirs', ownerId: 'user-2' },
 				],
 			},
 		});

@@ -20,15 +20,16 @@ describe('RedisAgentMemoryApi credential', () => {
 
 		expect(test).toEqual({
 			method: 'GET',
-			url: 'https://memory.example.com/v1/stores/store-1/health',
+			url: 'https://memory.example.com/iris/data/v1/agent-memory/stores/store-1/health',
 			headers: { Authorization: 'Bearer secret' },
 		});
 	});
 
-	it('names all three fields when the test gets a 403', () => {
+	it('names all three fields on a 403 and the Server URL on a 404', () => {
 		// The gateway refuses a wrong key, a wrong store and an extra path segment
 		// in the URL the same way; n8n's default for a 403 is the bare word
-		// "Forbidden".
+		// "Forbidden". A Server URL that carries a path, or a server on the old
+		// API, answers with an empty 404.
 		const { test } = new RedisAgentMemoryApi();
 
 		expect(test.rules).toEqual([
@@ -39,17 +40,26 @@ describe('RedisAgentMemoryApi credential', () => {
 					message: 'Forbidden: check the API Key, Server URL and Store ID',
 				},
 			},
+			{
+				type: 'responseCode',
+				properties: {
+					value: 404,
+					message: expect.stringContaining('check the Server URL') as string,
+				},
+			},
 		]);
 	});
 
 	it('builds the same URL as the nodes: trailing slashes dropped, store ID encoded', () => {
-		// The nodes' request adapter sends /v1/stores/store%2F1/...; the test must too.
+		// The nodes' request adapter sends .../stores/store%2F1/...; the test must too.
 		const { url } = resolveCredentialTest({
 			serverUrl: 'https://memory.example.com//',
 			storeId: 'store/1',
 			apiKey: 'secret',
 		});
 
-		expect(url).toBe('https://memory.example.com/v1/stores/store%2F1/health');
+		expect(url).toBe(
+			'https://memory.example.com/iris/data/v1/agent-memory/stores/store%2F1/health',
+		);
 	});
 });

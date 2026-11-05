@@ -22,6 +22,8 @@ interface Setup {
 	respond?: (options: IHttpRequestOptions) => unknown;
 }
 
+const STORE_URL = 'https://memory.example.com/iris/data/v1/agent-memory/stores/store%2F1';
+
 const NODE: INode = {
 	id: 'memory-node',
 	name: 'Redis Agent Memory',
@@ -103,7 +105,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		expect(requests[0].credentialType).toBe('redisAgentMemoryApi');
 		expect(requests[0].options).toMatchObject({
 			method: 'GET',
-			url: 'https://memory.example.com/v1/stores/store%2F1/session-memory/s-1',
+			url: `${STORE_URL}/sessions/s-1`,
 			json: true,
 		});
 		expect(chat_history.map((m) => [m.getType(), m.content])).toEqual([
@@ -184,19 +186,20 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 
 		const posts = requests.filter((r) => r.options.method === 'POST');
 		expect(posts.map((r) => r.options.url)).toEqual([
-			'https://memory.example.com/v1/stores/store%2F1/session-memory/events',
-			'https://memory.example.com/v1/stores/store%2F1/session-memory/events',
+			`${STORE_URL}/sessions/s-1/events`,
+			`${STORE_URL}/sessions/s-1/events`,
 		]);
 		expect(posts.map((r) => r.options.body)).toMatchObject([
 			{
-				sessionId: 's-1',
+				idempotencyKey: expect.any(String) as string,
 				actorId: 'user-1',
 				role: 'USER',
 				content: [{ text: 'What is 2+2?' }],
-				namespaceRef: { namespaceId: 'ns-product' },
+				namespaceId: 'ns-product',
 			},
 			{ role: 'ASSISTANT', content: [{ text: 'It is 4.' }] },
 		]);
+		expect(posts[0].options.body).not.toHaveProperty('sessionId');
 	});
 
 	// n8n shows a sub-node error as "Error in sub-node …" with the node's
@@ -281,10 +284,10 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 	});
 
 	describe('Recall Long-Term Memories', () => {
-		const SEARCH_URL = 'https://memory.example.com/v1/stores/store%2F1/long-term-memory/search';
+		const SEARCH_URL = `${STORE_URL}/memories/search`;
 		const respond = (options: IHttpRequestOptions) =>
 			options.url === SEARCH_URL
-				? { items: [{ id: 'm1', text: 'The user is vegetarian' }] }
+				? { items: [{ memoryId: 'm1', text: 'The user is vegetarian' }] }
 				: { events: [{ eventId: 'e1', role: 'USER', content: [{ text: 'Hi' }] }] };
 
 		it('searches with the top-level Recall Query and Recall Limit when the switch is on', async () => {
@@ -298,7 +301,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 			const search = requests.find((r) => r.options.url === SEARCH_URL);
 			expect(search?.options).toMatchObject({
 				method: 'POST',
-				body: { text: 'food', limit: 2, filter: { ownerId: { eq: 'user-1' } } },
+				body: { query: 'food', limit: 2, filter: { ownerId: { eq: 'user-1' } } },
 			});
 			expect(chat_history.map((m) => [m.getType(), m.content])).toEqual([
 				[
@@ -331,6 +334,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 
 		await memory.saveContext({ input: 'Hi' }, { output: 'Hello' });
 
-		expect(requests[0].options.body).toMatchObject({ sessionId: '12345', actorId: '678' });
+		expect(requests[0].options.url).toBe(`${STORE_URL}/sessions/12345/events`);
+		expect(requests[0].options.body).toMatchObject({ actorId: '678' });
 	});
 });

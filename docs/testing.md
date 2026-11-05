@@ -35,7 +35,7 @@ the hosted store this took about 20 seconds; the test allows 90) and checks
 that the summary reaches the model and not the chat widget. CI sets the
 variable. The same wire shape is also pinned without the network:
 `test/unit/fixtures/session-with-summary.json` is a recorded
-`GET …/session-memory/{sessionId}` response with a real summary, and a unit
+`GET …/sessions/{sessionId}` response with a real summary, and a unit
 test maps it through the node's classes.
 
 Every run prefixes the session and user IDs it creates with `it-<run>-<random>`,
