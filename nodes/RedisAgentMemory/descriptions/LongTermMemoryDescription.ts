@@ -95,7 +95,7 @@ const includeSourcesField: INodeProperties = {
 	type: 'boolean',
 	default: false,
 	description:
-		'Whether to keep where each memory came from: a list of its sources with their session or document and event IDs',
+		'Whether to keep where each memory came from: the sources the record carries, in short form, with their session or document and event IDs. For the full list with its evidence, use Get Sources.',
 	displayOptions: {
 		show: { resource: ['longTermMemory'], operation: ['search', 'get', 'getAll'], simple: [true] },
 	},

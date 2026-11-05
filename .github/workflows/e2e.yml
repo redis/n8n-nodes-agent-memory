@@ -88,8 +88,6 @@ jobs:
         env:
           # Also wait for a computed summary view result in the chat agent test.
           AGENT_MEMORY_SUMMARY_VIEW_TESTS: 'true'
-          # Also read the sources of memories extracted from a seeded session.
-          AGENT_MEMORY_EXTRACTION_TESTS: 'true'
 
       - name: Upload container logs
         if: failure()

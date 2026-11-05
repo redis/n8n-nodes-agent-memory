@@ -416,14 +416,22 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					options: {},
 				});
 				const match = found.find((memory) => memory.memoryId === extracted.memoryId);
-				expect(match?.sources).toEqual([
-					{
-						sourceId: source.sourceId,
-						kind: 'SESSION',
-						sessionId,
-						eventIds: source.eventIds,
-					},
-				]);
+				const shortSource = {
+					sourceId: source.sourceId,
+					kind: 'SESSION',
+					sessionId,
+					eventIds: source.eventIds,
+				};
+				expect(match?.sources).toEqual([shortSource]);
+
+				// The single-record endpoint carries the sources inline as well.
+				const [fetched] = await run({
+					resource: 'longTermMemory',
+					operation: 'get',
+					memoryId: extracted.memoryId,
+					includeSources: true,
+				});
+				expect(fetched.sources).toEqual([shortSource]);
 			}, 240_000);
 		});
 	});
