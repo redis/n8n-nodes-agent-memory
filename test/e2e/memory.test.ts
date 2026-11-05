@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { sleep } from 'n8n-workflow';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
-import { agentMemoryConfig, runPrefix, skipReason } from '../support/env';
+import { agentMemoryConfig, runPrefix, skipReason, summaryViewTests } from '../support/env';
 import {
 	callWebhookAndWait,
 	CHAT_AGENT_WORKFLOW,
@@ -30,6 +31,15 @@ const RECALL_HEADER = 'Long-term memories about the user, from earlier conversat
 
 /** The chat URL of fixtures/workflows/chat-agent-recall.json, the agent with recall on. */
 const RECALL_CHAT_WEBHOOK_PATH = '6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0011/chat';
+
+/** The first line of the message that carries a summary view's briefing. */
+const SUMMARY_VIEW_HEADER = 'What is known about the user, summarized from earlier conversations:';
+
+/**
+ * The chat URL of fixtures/workflows/chat-agent-summary-view.json, the agent
+ * whose memory reads the summary view named by `summaryViewId` in the message.
+ */
+const SUMMARY_VIEW_CHAT_WEBHOOK_PATH = '6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0012/chat';
 
 /**
  * Runs the node inside a real n8n (see docker-compose.yml), against the hosted
@@ -99,8 +109,16 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 		await resetStub();
 	});
 
+	/** Summary views created here, deleted at the end. */
+	const viewIds: string[] = [];
+
 	afterAll(async () => {
 		await client.cleanup();
+		for (const viewId of viewIds) {
+			await client
+				.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
+				.catch(() => undefined);
+		}
 	});
 
 	describe('Chat Memory Manager, no model', () => {
@@ -223,6 +241,108 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 	// extracts long-term memories from sessions in the background, so an
 	// agent with recall on could add a recall message to the history that the
 	// tests above compare in full.
+	describe('summary view option', () => {
+		/** A view grouped by user that computes only on Refresh, created straight on the store. */
+		async function createView(label: string): Promise<string> {
+			const created = await client.request<{ viewId: string }>({
+				method: 'POST',
+				path: '/summary-views',
+				body: {
+					name: `${runPrefix}-e2e-${label}`,
+					source: 'LONG_TERM',
+					groupBy: ['ownerId'],
+					output: { format: 'TEXT', instructions: 'List what is known about the user.' },
+					refreshPolicy: { mode: 'MANUAL' },
+				},
+			});
+			viewIds.push(created!.viewId);
+			return created!.viewId;
+		}
+
+		async function chat(session: Session, summaryViewId: string, chatInput: string) {
+			const { output } = await postJson<{ output: string }>(
+				`/webhook/${SUMMARY_VIEW_CHAT_WEBHOOK_PATH}`,
+				{ action: 'sendMessage', sessionId: session.sessionId, chatInput, summaryViewId },
+			);
+			return output;
+		}
+
+		it('adds nothing to the history while the view has no summary for the user', async () => {
+			const session = newChatSession('view-cold');
+			const viewId = await createView('cold');
+
+			expect(await chat(session, viewId, 'Hello there')).toBe('Echo: Hello there');
+
+			expect(historyOf(lastRequestFor(await stubRequests(), 'Hello there'))).toEqual([]);
+			expect(await storedTexts(session.sessionId)).toEqual([
+				['USER', 'Hello there'],
+				['ASSISTANT', 'Echo: Hello there'],
+			]);
+		});
+
+		// Opt-in (AGENT_MEMORY_SUMMARY_VIEW_TESTS=true): the server computes the
+		// summary with a model.
+		describe.skipIf(!summaryViewTests)('computed result', () => {
+			it("gives the model the view's summary of the user once it is READY", async () => {
+				const session = newChatSession('view-ready');
+				const viewId = await createView('ready');
+				await client.request({
+					method: 'POST',
+					path: '/memories',
+					body: {
+						memories: [
+							{
+								memoryId: `${session.sessionId}-sv-1`,
+								ownerId: session.userId,
+								text: 'The user is vegetarian',
+							},
+							{
+								memoryId: `${session.sessionId}-sv-2`,
+								ownerId: session.userId,
+								text: 'The user lives in Sofia',
+							},
+						],
+					},
+				});
+				await client.request({
+					method: 'POST',
+					path: `/summary-views/${viewId}/refresh`,
+					body: { target: 'PARTITION', scope: { ownerId: session.userId } },
+				});
+				const deadline = Date.now() + 100_000;
+				let status = '';
+				while (Date.now() < deadline) {
+					const result = await client.request<{ status: string }>({
+						method: 'GET',
+						path: `/summary-views/${viewId}/result`,
+						qs: { ownerId: session.userId },
+					});
+					status = result?.status ?? '';
+					if (['READY', 'EMPTY', 'FAILED'].includes(status)) break;
+					await sleep(3_000);
+				}
+				expect(status).toBe('READY');
+
+				expect(await chat(session, viewId, 'What do you know about me?')).toBe(
+					'Echo: What do you know about me?',
+				);
+
+				const history = historyOf(
+					lastRequestFor(await stubRequests(), 'What do you know about me?'),
+				);
+				expect(history).toHaveLength(1);
+				expect(history[0][0]).toBe('user');
+				expect(history[0][1].startsWith(`${SUMMARY_VIEW_HEADER}\n`)).toBe(true);
+				expect(history[0][1].length).toBeGreaterThan(SUMMARY_VIEW_HEADER.length + 1);
+				// The briefing is shown to the model, not written back to the session.
+				expect(await storedTexts(session.sessionId)).toEqual([
+					['USER', 'What do you know about me?'],
+					['ASSISTANT', 'Echo: What do you know about me?'],
+				]);
+			});
+		});
+	});
+
 	describe('fixes verified inside n8n', () => {
 		// Recall ran only with a Recall Query typed under Options; the switch
 		// alone did nothing. The query now defaults to the chat input.

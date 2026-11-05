@@ -594,6 +594,97 @@
 					"name": "Agent Memory (e2e)"
 				}
 			}
+		},
+		{
+			"id": "node-e2e-action-view-result",
+			"name": "view-result webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				2800
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a002e",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-view-result",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-view-result",
+			"name": "Action: view-result",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				2800
+			],
+			"parameters": {
+				"resource": "summaryView",
+				"operation": "getResult",
+				"viewId": {
+					"__rl": true,
+					"mode": "id",
+					"value": "={{ $json.body.viewId ?? '' }}"
+				},
+				"scope": {
+					"ownerId": "={{ $json.body.userId ?? '' }}"
+				},
+				"waitForResult": false,
+				"options": {},
+				"simple": "={{ $json.body.simple ?? true }}"
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
+		},
+		{
+			"id": "node-e2e-action-view-get",
+			"name": "view-get webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				3000
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a002f",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-view-get",
+				"responseMode": "lastNode",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-view-get",
+			"name": "Action: view-get",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				3000
+			],
+			"parameters": {
+				"resource": "summaryView",
+				"operation": "get",
+				"viewId": {
+					"__rl": true,
+					"mode": "id",
+					"value": "={{ $json.body.viewId ?? '' }}"
+				},
+				"simple": "={{ $json.body.simple ?? true }}"
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
 		}
 	],
 	"connections": {
@@ -745,6 +836,28 @@
 				[
 					{
 						"node": "Action: memory-move",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"view-result webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: view-result",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"view-get webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: view-get",
 						"type": "main",
 						"index": 0
 					}

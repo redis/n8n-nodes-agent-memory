@@ -11,6 +11,8 @@
 - Search sends `query` and `minScore` (the Similarity Threshold option) instead of `text` and `similarityThreshold`; lists page with `cursor`/`nextCursor`.
 - Every create and update sends a fresh `idempotencyKey`, which stores with ingestion hooks require.
 - Session → Add Event and the chat memory post to `/sessions/{sessionId}/events`; the server still creates the session on its first event.
+- New resource **Summary View** on the action node: Get Result (one group's summary, with Wait For Result polling), Refresh, Create, Get, Get Many, Update and Delete. The View field lists the store's views. Summary views must be enabled on the store.
+- Memory sub-node option "Summary View ID" (empty by default): when set, each turn also reads that view's summary of the user and gives it to the model, before the session summary.
 
 ## 0.2.0 (2026-11-04)
 

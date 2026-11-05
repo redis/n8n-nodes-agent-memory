@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { IDataObject, IExecuteFunctions, IHttpRequestOptions, INode } from 'n8n-workflow';
 import { RedisAgentMemory } from '../../nodes/RedisAgentMemory/RedisAgentMemory.node';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
-import { agentMemoryConfig, runPrefix, skipReason } from '../support/env';
+import { agentMemoryConfig, runPrefix, skipReason, summaryViewTests } from '../support/env';
 
 const NODE: INode = {
 	id: 'action-node',
@@ -305,5 +305,193 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 		await expect(
 			run({ resource: 'session', operation: 'get', sessionId, options: {} }),
 		).rejects.toMatchObject({ httpCode: '404' });
+	});
+	describe('summary views', () => {
+		const viewIds: string[] = [];
+
+		afterAll(async () => {
+			for (const viewId of viewIds) {
+				await client
+					.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
+					.catch(() => undefined);
+			}
+		});
+
+		/** A view grouped by user that computes only on Refresh, created through the node. */
+		async function createView(label: string): Promise<IDataObject> {
+			const [created] = await run({
+				resource: 'summaryView',
+				operation: 'create',
+				name: `${runPrefix}-${label}`,
+				groupBy: ['ownerId'],
+				outputFormat: 'TEXT',
+				instructions: 'List what is known about the user, one line per fact.',
+				refreshMode: 'MANUAL',
+				additionalFields: { description: 'Created by the n8n contract tests' },
+			});
+			viewIds.push(created.viewId as string);
+			return created;
+		}
+
+		it('creates, reads, lists, refreshes, updates and deletes a view', async () => {
+			const created = await createView('view');
+			const viewId = created.viewId as string;
+			const name = `${runPrefix}-view`;
+			expect(created).toEqual({
+				viewId,
+				name,
+				visibility: 'PRIVATE',
+				groupBy: ['ownerId'],
+				state: 'ACTIVE',
+				format: 'TEXT',
+				refreshMode: 'MANUAL',
+				updatedAt: expect.any(String),
+			});
+			expect(viewId).toMatch(/^sv_[0-9a-f]{32}$/);
+
+			const [raw] = await run({ resource: 'summaryView', operation: 'get', viewId, simple: false });
+			expect(raw).toMatchObject({
+				viewId,
+				name,
+				source: 'LONG_TERM',
+				description: 'Created by the n8n contract tests',
+				output: {
+					format: 'TEXT',
+					instructions: 'List what is known about the user, one line per fact.',
+				},
+				refreshPolicy: { mode: 'MANUAL' },
+				definitionVersion: 1,
+			});
+
+			const listed = await run({ resource: 'summaryView', operation: 'getAll', returnAll: true });
+			expect(listed).toContainEqual(expect.objectContaining({ viewId, name }));
+
+			// A partition nobody has written to is COLD; the node returns it as an item.
+			const ownerId = `${runPrefix}-nobody`;
+			const [cold] = await run({
+				resource: 'summaryView',
+				operation: 'getResult',
+				viewId,
+				scope: { ownerId },
+				options: {},
+			});
+			expect(cold).toEqual({
+				viewId,
+				status: 'COLD',
+				stale: false,
+				sourceMemoryCount: 0,
+				summarizedMemoryCount: 0,
+				truncated: false,
+			});
+			const [rawCold] = await run({
+				resource: 'summaryView',
+				operation: 'getResult',
+				viewId,
+				scope: { ownerId },
+				options: {},
+				simple: false,
+			});
+			expect(rawCold).toMatchObject({ viewId, scope: { ownerId }, format: 'TEXT', status: 'COLD' });
+
+			const [accepted] = await run({
+				resource: 'summaryView',
+				operation: 'refresh',
+				viewId,
+				target: 'PARTITION',
+				scope: { ownerId },
+			});
+			expect(accepted).toEqual({ viewId, target: 'PARTITION', accepted: true });
+
+			const [updated] = await run({
+				resource: 'summaryView',
+				operation: 'update',
+				viewId,
+				updateFields: { name: `${name}-renamed`, state: 'DISABLED' },
+			});
+			expect(updated).toMatchObject({ viewId, name: `${name}-renamed`, state: 'DISABLED' });
+
+			const [deleted] = await run({ resource: 'summaryView', operation: 'delete', viewId });
+			expect(deleted).toEqual({ deleted: true, viewId });
+			// Deletion is asynchronous: the view is DELETING until it is gone.
+			const after = await client.request<{ state: string }>({
+				method: 'GET',
+				path: `/summary-views/${viewId}`,
+				allowNotFound: true,
+			});
+			expect(after === undefined || after.state === 'DELETING').toBe(true);
+		});
+
+		it('answers Delete with 202 and the DELETING state, and a missing view with the API not-found', async () => {
+			const view = await createView('delete-probe');
+			const viewId = view.viewId as string;
+
+			const probe = await client.probe('DELETE', `/summary-views/${viewId}`);
+			expect(probe.status).toBe(202);
+			expect(JSON.parse(probe.body)).toEqual({ viewId, state: 'DELETING' });
+
+			await expect(
+				run({
+					resource: 'summaryView',
+					operation: 'getResult',
+					viewId: 'sv_00000000000000000000000000000000',
+					scope: { ownerId: 'nobody' },
+					options: {},
+				}),
+			).rejects.toMatchObject({ httpCode: '404' });
+			// The server's wording is pinned by the e2e test, inside a real n8n.
+			const missing = await client.probe(
+				'GET',
+				'/summary-views/sv_00000000000000000000000000000000/result?ownerId=nobody',
+			);
+			expect(missing.status).toBe(404);
+			expect(JSON.parse(missing.body)).toEqual({
+				type: '/errors/resource-not-found',
+				title: 'Summary View Not Found',
+				status: 404,
+				detail: 'The requested Summary View or exact result was not found.',
+			});
+		});
+
+		// Opt-in (AGENT_MEMORY_SUMMARY_VIEW_TESTS=true): the server computes the
+		// summary with a model, which takes a while and costs money.
+		describe.skipIf(!summaryViewTests)('computed result', () => {
+			it('refreshes a partition and waits until the summary of the seeded memories is ready', async () => {
+				const view = await createView('computed');
+				const viewId = view.viewId as string;
+				const ownerId = `${runPrefix}-sv-owner`;
+				client.track(`${runPrefix}-sv-no-session`, ownerId);
+				await client.request({
+					method: 'POST',
+					path: '/memories',
+					body: {
+						memories: [
+							{ memoryId: `${runPrefix}-sv-1`, ownerId, text: 'The user is vegetarian' },
+							{ memoryId: `${runPrefix}-sv-2`, ownerId, text: 'The user lives in Sofia' },
+						],
+					},
+				});
+
+				const [result] = await run({
+					resource: 'summaryView',
+					operation: 'refresh',
+					viewId,
+					target: 'PARTITION',
+					scope: { ownerId },
+					waitForResult: true,
+					maxWait: 120,
+					options: { includeSourceMemoryIds: true },
+				});
+				expect(result).toMatchObject({
+					viewId,
+					status: 'READY',
+					text: expect.any(String),
+					computedAt: expect.any(String),
+					sourceMemoryCount: 2,
+				});
+				expect(result.sourceMemoryIds).toEqual(
+					expect.arrayContaining([`${runPrefix}-sv-1`, `${runPrefix}-sv-2`]),
+				);
+			}, 150_000);
+		});
 	});
 });

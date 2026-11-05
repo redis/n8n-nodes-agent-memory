@@ -9,6 +9,7 @@ type MemoryOptions = {
 	windowSize?: unknown;
 	namespaceId?: string;
 	includeSummary?: boolean;
+	summaryViewId?: string;
 	verifyOwner?: boolean;
 };
 
@@ -172,6 +173,15 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 						placeholder: 'e.g. ns-product',
 					},
 					{
+						displayName: 'Summary View ID',
+						name: 'summaryViewId',
+						type: 'string',
+						default: '',
+						description:
+							"ID of a summary view grouped by user (made with Redis Agent Memory → Summary View). When set, the view's summary of the User ID is given to the model on every turn, before the session summary, once the server has computed it. Adds one request per turn.",
+						placeholder: 'e.g. sv_ea8eaecb72b34b91befce96a9014afb6',
+					},
+					{
 						displayName: 'Verify Session Owner',
 						name: 'verifyOwner',
 						type: 'boolean',
@@ -227,6 +237,7 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 		const memory = new SummaryAwareWindowedChatMemory(history, {
 			windowSize,
 			includeSummary: options.includeSummary ?? true,
+			summaryViewId: options.summaryViewId?.trim() || undefined,
 			recall: recall
 				? {
 						query: String(this.getNodeParameter('recallQuery', itemIndex, '') ?? ''),

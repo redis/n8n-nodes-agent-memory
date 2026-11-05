@@ -329,6 +329,34 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		});
 	});
 
+	it("reads the summary view's result for the user when Summary View ID is set", async () => {
+		const RESULT_URL = `${STORE_URL}/summary-views/sv-1/result`;
+		const { memory, requests } = await supply({
+			parameters: { options: { summaryViewId: ' sv-1 ' } },
+			respond: (options) =>
+				options.url === RESULT_URL
+					? { status: 'READY', value: { text: 'Vegetarian, in Sofia.' } }
+					: { events: [{ eventId: 'e1', role: 'USER', content: [{ text: 'Hi' }] }] },
+		});
+
+		const { chat_history } = await memory.loadMemoryVariables({});
+
+		const result = requests.find((r) => r.options.url === RESULT_URL);
+		expect(result?.options).toMatchObject({ method: 'GET', qs: { ownerId: 'user-1' } });
+		expect(chat_history.map((m) => [m.getType(), m.content])).toEqual([
+			[
+				'human',
+				[
+					{
+						type: 'text',
+						text: 'What is known about the user, summarized from earlier conversations:\nVegetarian, in Sofia.',
+					},
+				],
+			],
+			['human', [{ type: 'text', text: 'Hi' }]],
+		]);
+	});
+
 	it('accepts numeric session and user IDs', async () => {
 		const { memory, requests } = await supply({ parameters: { sessionId: 12345, actorId: 678 } });
 

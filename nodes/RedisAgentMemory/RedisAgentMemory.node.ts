@@ -8,7 +8,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError, sleep } from 'n8n-workflow';
 import {
 	AGENT_MEMORY_CREDENTIAL,
 	createAgentMemoryRequest,
@@ -21,15 +21,22 @@ import {
 } from './descriptions/LongTermMemoryDescription';
 import { namespaceFields, namespaceOperations } from './descriptions/NamespaceDescription';
 import { sessionFields, sessionOperations } from './descriptions/SessionDescription';
+import { summaryViewFields, summaryViewOperations } from './descriptions/SummaryViewDescription';
 
 /** Largest page the search endpoint serves. */
 const MAX_PAGE_SIZE = 100;
 
 /**
- * How many pages the namespace list search reads for one filter string. The
- * API has no name search, so the node matches names itself.
+ * How many pages a list search reads for one filter string. The API has no
+ * name search, so the node matches names itself.
  */
 const MAX_SEARCH_PAGES = 10;
+
+/** How often Wait For Result asks for a summary view result. */
+const RESULT_POLL_INTERVAL_MS = 2_000;
+
+/** The result statuses that end a Wait For Result poll. */
+const SETTLED_RESULT_STATUSES = new Set(['READY', 'EMPTY', 'FAILED']);
 
 interface Page<T> {
 	items: T[];
@@ -59,6 +66,45 @@ interface BulkResult {
 interface UpsertResult {
 	memoryId: string;
 	created: boolean;
+}
+
+/** A summary view as the API returns it, as far as Simplify reads it. */
+interface SummaryViewResponse extends IDataObject {
+	output?: { format?: string };
+	refreshPolicy?: { mode?: string };
+}
+
+/** One partition's result from `GET /summary-views/{viewId}/result`. */
+interface SummaryViewResult extends IDataObject {
+	status?: string;
+	value?: { text?: string; data?: IDataObject };
+}
+
+/** The keys that select one partition of a summary view. */
+interface ScopeFields {
+	ownerId?: string;
+	sessionId?: string;
+	namespaceId?: string;
+	memoryType?: string;
+}
+
+/** The definition fields of a summary view, as Create and Update collect them. */
+interface SummaryViewFields extends MemoryFields {
+	name?: string;
+	description?: string;
+	visibility?: string;
+	groupBy?: string[];
+	outputFormat?: string;
+	instructions?: string;
+	schema?: unknown;
+	refreshMode?: string;
+	debounceSeconds?: number;
+	reconcileIntervalSeconds?: number;
+	maxPartitions?: number;
+	timeWindowSeconds?: number;
+	state?: string;
+	clearFilter?: boolean;
+	clearTimeWindow?: boolean;
 }
 
 /** Fields shared by the memory filters, the create fields and the update fields. */
@@ -134,6 +180,22 @@ function compact(record: Record<string, unknown>): IDataObject {
 	) as IDataObject;
 }
 
+/** A positive whole number, or undefined: the editor's 0 means "not set". */
+function positive(value: unknown): number | undefined {
+	const number = wholeNumber(value);
+	return number !== undefined && number > 0 ? number : undefined;
+}
+
+/** The scope keys that are set, as the result and refresh endpoints take them. */
+function scopeKeys(scope: ScopeFields): IDataObject {
+	return compact({
+		ownerId: optional(scope.ownerId),
+		sessionId: optional(scope.sessionId),
+		namespaceId: optional(scope.namespaceId),
+		memoryType: optional(scope.memoryType),
+	});
+}
+
 /**
  * The fields of a memory most workflows read. Create's echo of its request
  * body has the same keys, so Create and Get agree.
@@ -160,6 +222,37 @@ function simplifyNamespace(namespace: IDataObject): IDataObject {
 		state: namespace.state,
 		parentId: namespace.parentId,
 		ownerId: namespace.ownerId,
+	});
+}
+
+/** The fields of a summary view most workflows read. */
+function simplifySummaryView(view: SummaryViewResponse): IDataObject {
+	return compact({
+		viewId: view.viewId,
+		name: view.name,
+		visibility: view.visibility,
+		groupBy: view.groupBy,
+		state: view.state,
+		format: view.output?.format,
+		refreshMode: view.refreshPolicy?.mode,
+		updatedAt: view.updatedAt,
+	});
+}
+
+/** A summary view result with the summary itself at the top level. */
+function simplifySummaryResult(result: SummaryViewResult): IDataObject {
+	return compact({
+		viewId: result.viewId,
+		status: result.status,
+		stale: result.stale,
+		text: result.value?.text,
+		data: result.value?.data,
+		computedAt: result.computedAt,
+		sourceMemoryCount: result.sourceMemoryCount,
+		summarizedMemoryCount: result.summarizedMemoryCount,
+		truncated: result.truncated,
+		sourceMemoryIds: result.sourceMemoryIds,
+		errorCode: result.errorCode,
 	});
 }
 
@@ -263,6 +356,7 @@ export class RedisAgentMemory implements INodeType {
 					{ name: 'Long-Term Memory', value: 'longTermMemory' },
 					{ name: 'Namespace', value: 'namespace' },
 					{ name: 'Session', value: 'session' },
+					{ name: 'Summary View', value: 'summaryView' },
 				],
 				default: 'longTermMemory',
 			},
@@ -272,12 +366,15 @@ export class RedisAgentMemory implements INodeType {
 			...namespaceFields,
 			...sessionOperations,
 			...sessionFields,
+			...summaryViewOperations,
+			...summaryViewFields,
 		],
 	};
 
 	methods = {
 		listSearch: {
 			searchNamespaces,
+			searchSummaryViews,
 		},
 	};
 
@@ -322,6 +419,7 @@ async function runItem(
 	if (resource === 'longTermMemory') return await run.longTermMemory(operation);
 	if (resource === 'session') return await run.session(operation);
 	if (resource === 'namespace') return await run.namespace(operation);
+	if (resource === 'summaryView') return await run.summaryView(operation);
 	throw new NodeOperationError(context.getNode(), `Unknown resource "${resource}"`, { itemIndex });
 }
 
@@ -335,20 +433,45 @@ async function searchNamespaces(
 	filter?: string,
 	paginationToken?: string,
 ): Promise<INodeListSearchResult> {
-	const request = await createAgentMemoryRequest(this, 0);
+	return await searchRecords(this, '/namespaces', 'namespaceId', filter, paginationToken);
+}
+
+/** The store's summary views for the View locator's "From List" mode; see `searchNamespaces`. */
+async function searchSummaryViews(
+	this: ILoadOptionsFunctions,
+	filter?: string,
+	paginationToken?: string,
+): Promise<INodeListSearchResult> {
+	return await searchRecords(this, '/summary-views', 'viewId', filter, paginationToken);
+}
+
+/**
+ * One list-search page of the records at `path`, each shown by its `name`
+ * and valued by its `idKey`. With a filter string, it reads up to
+ * `MAX_SEARCH_PAGES` pages and keeps the records whose name contains the
+ * string, in any case.
+ */
+async function searchRecords(
+	context: ILoadOptionsFunctions,
+	path: string,
+	idKey: string,
+	filter?: string,
+	paginationToken?: string,
+): Promise<INodeListSearchResult> {
+	const request = await createAgentMemoryRequest(context, 0);
 	const needle = (filter ?? '').trim().toLowerCase();
 	const results: INodeListSearchResult['results'] = [];
 	let cursor = paginationToken;
 	for (let pages = 0; pages < (needle ? MAX_SEARCH_PAGES : 1); pages++) {
 		const page = await request<Page<IDataObject>>({
 			method: 'GET',
-			path: '/namespaces',
+			path,
 			qs: { limit: MAX_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
 		});
-		for (const namespace of page?.items ?? []) {
-			const name = String(namespace.name ?? namespace.namespaceId ?? '');
+		for (const item of page?.items ?? []) {
+			const name = String(item.name ?? item[idKey] ?? '');
 			if (needle && !name.toLowerCase().includes(needle)) continue;
-			results.push({ name, value: String(namespace.namespaceId) });
+			results.push({ name, value: String(item[idKey]) });
 		}
 		cursor = page?.nextCursor;
 		if (!cursor) break;
@@ -760,6 +883,199 @@ class Operations {
 			}
 			default:
 				return this.unknownOperation('namespace', operation);
+		}
+	}
+	/** The summary view as Simplify wants it. */
+	private summaryViewRecord(view: SummaryViewResponse | undefined): IDataObject {
+		return this.simple ? simplifySummaryView(view ?? {}) : (view ?? {});
+	}
+
+	/** The result as Simplify wants it. */
+	private summaryResultRecord(result: SummaryViewResult | undefined): IDataObject {
+		return this.simple ? simplifySummaryResult(result ?? {}) : (result ?? {});
+	}
+
+	/** The value of a Schema field as an object: the editor gives a string, an expression may give the object. */
+	private schemaObject(value: unknown): IDataObject | undefined {
+		if (typeof value === 'object' && value !== null) return value as IDataObject;
+		const text = optional(value);
+		if (!text) return undefined;
+		try {
+			const parsed: unknown = JSON.parse(text);
+			if (typeof parsed === 'object' && parsed !== null) return parsed as IDataObject;
+		} catch {
+			// Reported below.
+		}
+		this.refuse("'Schema' is not a JSON object", 'Give the schema as { "fields": [...] }');
+	}
+
+	/**
+	 * The create or update body from the definition fields. Nested objects
+	 * (`output`, `refreshPolicy`, `evictionPolicy`, `filter`) are sent only
+	 * when one of their fields is set, so an update changes nothing else.
+	 */
+	private summaryViewBody(fields: SummaryViewFields): IDataObject {
+		const output = compact({
+			format: optional(fields.outputFormat),
+			instructions: optional(fields.instructions),
+			schema: this.schemaObject(fields.schema),
+		});
+		const refreshPolicy = compact({
+			mode: optional(fields.refreshMode),
+			debounceSeconds: positive(fields.debounceSeconds),
+			reconcileIntervalSeconds: positive(fields.reconcileIntervalSeconds),
+		});
+		const maxPartitions = positive(fields.maxPartitions);
+		const filter = memoryFilter(fields);
+		return compact({
+			name: optional(fields.name),
+			description: optional(fields.description),
+			visibility: optional(fields.visibility),
+			groupBy: fields.groupBy && fields.groupBy.length > 0 ? fields.groupBy : undefined,
+			output: Object.keys(output).length > 0 ? output : undefined,
+			refreshPolicy: Object.keys(refreshPolicy).length > 0 ? refreshPolicy : undefined,
+			evictionPolicy: maxPartitions ? { maxPartitions } : undefined,
+			timeWindowSeconds: positive(fields.timeWindowSeconds),
+			filter: Object.keys(filter).length > 0 ? filter : undefined,
+			state: optional(fields.state),
+			clearFilter: fields.clearFilter ? true : undefined,
+			clearTimeWindow: fields.clearTimeWindow ? true : undefined,
+		});
+	}
+
+	/**
+	 * One partition's result. With Wait For Result on, asks again every two
+	 * seconds until the status is READY, EMPTY or FAILED, and fails once Max
+	 * Wait has passed. A FAILED result is returned as an item: the workflow
+	 * decides what to do with it.
+	 */
+	private async summaryResult(viewId: string, scope: IDataObject): Promise<IDataObject> {
+		const options = this.param<{ includeSourceMemoryIds?: boolean }>('options', {});
+		const qs = {
+			...scope,
+			...(options.includeSourceMemoryIds ? { includeSourceMemoryIds: true } : {}),
+		} as Record<string, string | boolean>;
+		const fetchResult = async () =>
+			await this.request<SummaryViewResult>({
+				method: 'GET',
+				path: `/summary-views/${encodeURIComponent(viewId)}/result`,
+				qs,
+			});
+		if (!this.param<boolean>('waitForResult', false)) {
+			return this.summaryResultRecord(await fetchResult());
+		}
+		const maxWait = wholeNumber(this.param<unknown>('maxWait', 60));
+		if (maxWait === undefined || maxWait < 1) {
+			this.refuse("'Max Wait' must be 1 or more", 'The number of seconds to wait for the result');
+		}
+		const deadline = Date.now() + maxWait * 1000;
+		for (;;) {
+			const result = await fetchResult();
+			if (SETTLED_RESULT_STATUSES.has(result?.status ?? '')) {
+				return this.summaryResultRecord(result);
+			}
+			if (Date.now() + RESULT_POLL_INTERVAL_MS > deadline) {
+				throw new NodeOperationError(
+					this.node,
+					`The summary was not ready after ${maxWait} seconds (status ${result?.status ?? 'unknown'})`,
+					{
+						itemIndex: this.itemIndex,
+						description:
+							'A manual-refresh view computes a summary only after Refresh. Run Refresh first, or raise Max Wait.',
+					},
+				);
+			}
+			await sleep(RESULT_POLL_INTERVAL_MS);
+		}
+	}
+
+	async summaryView(operation: string): Promise<IDataObject | IDataObject[]> {
+		switch (operation) {
+			case 'getResult': {
+				const viewId = this.required('viewId', 'View');
+				const scope = scopeKeys(this.param<ScopeFields>('scope', {}));
+				return await this.summaryResult(viewId, scope);
+			}
+			case 'refresh': {
+				const viewId = this.required('viewId', 'View');
+				const target = this.param<string>('target', 'PARTITION');
+				const scope = target === 'PARTITION' ? scopeKeys(this.param<ScopeFields>('scope', {})) : {};
+				const accepted = await this.request<IDataObject>({
+					method: 'POST',
+					path: `/summary-views/${encodeURIComponent(viewId)}/refresh`,
+					body: { target, ...(Object.keys(scope).length > 0 ? { scope } : {}) },
+				});
+				if (this.param<boolean>('waitForResult', false)) {
+					return await this.summaryResult(viewId, scope);
+				}
+				return accepted ?? { viewId, target, accepted: true };
+			}
+			case 'get': {
+				const viewId = this.required('viewId', 'View');
+				const view = await this.request<SummaryViewResponse>({
+					method: 'GET',
+					path: `/summary-views/${encodeURIComponent(viewId)}`,
+				});
+				return this.summaryViewRecord(view);
+			}
+			case 'getAll': {
+				const { pageSize, max } = this.paging();
+				const views = await collectPages<SummaryViewResponse>(
+					async (cursor) =>
+						await this.request<Page<SummaryViewResponse>>({
+							method: 'GET',
+							path: '/summary-views',
+							qs: { limit: pageSize, ...(cursor ? { cursor } : {}) },
+						}),
+					max,
+				);
+				return views.map((view) => this.summaryViewRecord(view));
+			}
+			case 'create': {
+				const name = this.required('name', 'Name');
+				const groupBy = this.param<string[]>('groupBy', []);
+				if (!Array.isArray(groupBy) || groupBy.length === 0) {
+					this.refuse("'Group By' is empty", 'Choose at least one key to group the summaries by');
+				}
+				const body = this.summaryViewBody({
+					...this.param<SummaryViewFields>('additionalFields', {}),
+					name,
+					groupBy,
+					outputFormat: this.param<string>('outputFormat', 'TEXT'),
+					instructions: this.param<string>('instructions', ''),
+					refreshMode: this.param<string>('refreshMode', 'MANUAL'),
+				});
+				const created = await this.request<SummaryViewResponse>({
+					method: 'POST',
+					path: '/summary-views',
+					body: { source: 'LONG_TERM', ...body },
+				});
+				return this.summaryViewRecord(created);
+			}
+			case 'update': {
+				const viewId = this.required('viewId', 'View');
+				const changes = this.summaryViewBody(this.param<SummaryViewFields>('updateFields', {}));
+				if (Object.keys(changes).length === 0) {
+					this.refuse("'Update Fields' is empty", 'Add at least one field to change');
+				}
+				const updated = await this.request<SummaryViewResponse>({
+					method: 'PATCH',
+					path: `/summary-views/${encodeURIComponent(viewId)}`,
+					body: changes,
+				});
+				return this.summaryViewRecord(updated);
+			}
+			case 'delete': {
+				const viewId = this.required('viewId', 'View');
+				// The server answers 202: the view goes to DELETING and disappears shortly after.
+				await this.request({
+					method: 'DELETE',
+					path: `/summary-views/${encodeURIComponent(viewId)}`,
+				});
+				return { deleted: true, viewId };
+			}
+			default:
+				return this.unknownOperation('summaryView', operation);
 		}
 	}
 }

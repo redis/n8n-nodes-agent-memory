@@ -78,9 +78,14 @@ jobs:
         env:
           # Also wait for a real server summary (about 20 s on the hosted store).
           AGENT_MEMORY_SUMMARY_TESTS: 'true'
+          # Also wait for a computed summary view result.
+          AGENT_MEMORY_SUMMARY_VIEW_TESTS: 'true'
 
       - name: Run end-to-end tests
         run: 'npm run test:e2e'
+        env:
+          # Also wait for a computed summary view result in the chat agent test.
+          AGENT_MEMORY_SUMMARY_VIEW_TESTS: 'true'
 
       - name: Upload container logs
         if: failure()

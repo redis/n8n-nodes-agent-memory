@@ -3,11 +3,18 @@ import { sleep } from 'n8n-workflow';
 import {
 	AgentMemoryChatHistory,
 	SUMMARY_MESSAGE_ID,
+	SUMMARY_VIEW_MESSAGE_ID,
 	SummaryAwareWindowedChatMemory,
 } from '../../nodes/RedisAgentMemoryChatMemory/memory';
 import { NOT_FOUND_ERROR_TYPE } from '../../nodes/shared/agentMemoryRequest';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
-import { agentMemoryConfig, runPrefix, skipReason, summaryTests } from '../support/env';
+import {
+	agentMemoryConfig,
+	runPrefix,
+	skipReason,
+	summaryTests,
+	summaryViewTests,
+} from '../support/env';
 
 /**
  * Runs the node's chat history against the hosted Agent Memory service, with
@@ -26,8 +33,104 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 		return { sessionId, actorId, history };
 	}
 
+	/** Summary views created here, deleted at the end. */
+	const viewIds: string[] = [];
+
 	afterAll(async () => {
 		await client.cleanup();
+		for (const viewId of viewIds) {
+			await client
+				.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
+				.catch(() => undefined);
+		}
+	});
+
+	/** A view grouped by user that computes only on Refresh. */
+	async function createView(label: string): Promise<string> {
+		const created = await client.request<{ viewId: string }>({
+			method: 'POST',
+			path: '/summary-views',
+			body: {
+				name: `${runPrefix}-${label}`,
+				source: 'LONG_TERM',
+				groupBy: ['ownerId'],
+				output: { format: 'TEXT', instructions: 'List what is known about the user.' },
+				refreshPolicy: { mode: 'MANUAL' },
+			},
+		});
+		viewIds.push(created!.viewId);
+		return created!.viewId;
+	}
+
+	describe('summary view option', () => {
+		it('adds nothing for a view that is not computed yet, or that does not exist', async () => {
+			const viewId = await createView('chat-cold');
+			const { history } = newSession();
+
+			const cold = new SummaryAwareWindowedChatMemory(history, {
+				windowSize: 10,
+				includeSummary: true,
+				summaryViewId: viewId,
+			});
+			expect(await cold.loadMessages()).toEqual([]);
+
+			const missing = new SummaryAwareWindowedChatMemory(history, {
+				windowSize: 10,
+				includeSummary: true,
+				summaryViewId: 'sv_00000000000000000000000000000000',
+			});
+			expect(await missing.loadMessages()).toEqual([]);
+		});
+
+		// Opt-in (AGENT_MEMORY_SUMMARY_VIEW_TESTS=true): the server computes the
+		// summary with a model.
+		describe.skipIf(!summaryViewTests)('computed result', () => {
+			it("gives the model the view's summary of the user once it is READY", async () => {
+				const viewId = await createView('chat-ready');
+				const { history, actorId } = newSession();
+				await client.request({
+					method: 'POST',
+					path: '/memories',
+					body: {
+						memories: [
+							{ memoryId: `${actorId}-sv-1`, ownerId: actorId, text: 'The user is vegetarian' },
+							{ memoryId: `${actorId}-sv-2`, ownerId: actorId, text: 'The user lives in Sofia' },
+						],
+					},
+				});
+				await client.request({
+					method: 'POST',
+					path: `/summary-views/${viewId}/refresh`,
+					body: { target: 'PARTITION', scope: { ownerId: actorId } },
+				});
+				const deadline = Date.now() + 120_000;
+				let status = '';
+				while (Date.now() < deadline) {
+					const result = await client.request<{ status: string }>({
+						method: 'GET',
+						path: `/summary-views/${viewId}/result`,
+						qs: { ownerId: actorId },
+					});
+					status = result?.status ?? '';
+					if (['READY', 'EMPTY', 'FAILED'].includes(status)) break;
+					await sleep(3_000);
+				}
+				expect(status).toBe('READY');
+
+				const memory = new SummaryAwareWindowedChatMemory(history, {
+					windowSize: 10,
+					includeSummary: true,
+					summaryViewId: viewId,
+				});
+				const messages = await memory.loadMessages();
+
+				expect(messages.map((m) => m.id)).toEqual([SUMMARY_VIEW_MESSAGE_ID]);
+				const [part] = messages[0].content;
+				expect(part.type === 'text' && part.text).toMatch(
+					/^What is known about the user, summarized from earlier conversations:\n\S/,
+				);
+			}, 150_000);
+		});
 	});
 
 	it('returns no messages for a session that does not exist', async () => {

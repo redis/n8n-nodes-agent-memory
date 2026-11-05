@@ -72,6 +72,8 @@ describe.skipIf(!agentMemoryConfig)(
 		const client = new AgentMemoryTestClient(agentMemoryConfig!);
 		/** Namespaces created here, oldest first; deleted newest first, after the memories. */
 		const namespaceIds: string[] = [];
+		/** Summary views created here. */
+		const viewIds: string[] = [];
 
 		/** A user ID inside this run's prefix, registered for cleanup. */
 		function newUser(label: string): string {
@@ -115,6 +117,11 @@ describe.skipIf(!agentMemoryConfig)(
 
 		afterAll(async () => {
 			await client.cleanup();
+			for (const viewId of viewIds) {
+				await client
+					.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
+					.catch(() => undefined);
+			}
 			for (const namespaceId of [...namespaceIds].reverse()) {
 				await client.request({
 					method: 'DELETE',
@@ -285,6 +292,84 @@ describe.skipIf(!agentMemoryConfig)(
 		// failed run with `500 Error in workflow` only, so the error assertions
 		// read the saved execution: the message, description and status the
 		// editor shows on the red node.
+		describe('summary views', () => {
+			/** A view grouped by user, computed only on Refresh, created straight on the store. */
+			async function createView(label: string): Promise<{ viewId: string; name: string }> {
+				const name = `${runPrefix}-action-${label}`;
+				const created = await client.request<{ viewId: string }>({
+					method: 'POST',
+					path: '/summary-views',
+					body: {
+						name,
+						source: 'LONG_TERM',
+						groupBy: ['ownerId'],
+						output: { format: 'TEXT' },
+						refreshPolicy: { mode: 'MANUAL' },
+					},
+				});
+				viewIds.push(created!.viewId);
+				return { viewId: created!.viewId, name };
+			}
+
+			it("reads a view and a user's result, simplified by default and raw with Simplify off", async () => {
+				const { viewId, name } = await createView('view');
+				const userId = newUser('view-user');
+
+				const [view] = await callAction<Record<string, unknown>>('e2e-action-view-get', { viewId });
+				expect(view).toEqual({
+					viewId,
+					name,
+					visibility: 'PRIVATE',
+					groupBy: ['ownerId'],
+					state: 'ACTIVE',
+					format: 'TEXT',
+					refreshMode: 'MANUAL',
+					updatedAt: expect.any(String),
+				});
+
+				// Nothing has been computed for this user, so the partition is COLD.
+				const [result] = await callAction<Record<string, unknown>>('e2e-action-view-result', {
+					viewId,
+					userId,
+				});
+				expect(result).toEqual({
+					viewId,
+					status: 'COLD',
+					stale: false,
+					sourceMemoryCount: 0,
+					summarizedMemoryCount: 0,
+					truncated: false,
+				});
+
+				const [raw] = await callAction<Record<string, unknown>>('e2e-action-view-result', {
+					viewId,
+					userId,
+					simple: false,
+				});
+				expect(raw).toMatchObject({
+					viewId,
+					scope: { ownerId: userId },
+					status: 'COLD',
+					format: 'TEXT',
+					definitionVersion: 1,
+				});
+			});
+
+			it('shows the server reason when the view does not exist', async () => {
+				const error = await failingAction('e2e-action-view-result', {
+					viewId: 'sv_00000000000000000000000000000000',
+					userId: newUser('no-view'),
+				});
+				expect(error).toMatchObject({
+					nodeName: 'Action: view-result',
+					type: 'NodeApiError',
+					httpCode: '404',
+					message: 'The requested Summary View or exact result was not found.',
+					description: 'Summary View Not Found (HTTP 404)',
+				});
+			});
+		});
+
 		describe('fixes verified inside n8n', () => {
 			// The editor showed n8n's generic status text; the server's reason stayed hidden.
 			it('shows the server reason for a missing memory and for a refused session ID', async () => {

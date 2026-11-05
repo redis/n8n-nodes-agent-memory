@@ -6,6 +6,7 @@ import {
 	AgentMemoryChatHistory,
 	RECALL_MESSAGE_ID,
 	SUMMARY_MESSAGE_ID,
+	SUMMARY_VIEW_MESSAGE_ID,
 	SummaryAwareWindowedChatMemory,
 	type AgentMemoryRequest,
 } from '../../nodes/RedisAgentMemoryChatMemory/memory';
@@ -496,6 +497,92 @@ describe('AgentMemoryChatHistory with Verify Session Owner', () => {
 		expect(await plain.getMessages()).toHaveLength(1);
 		await plain.addMessage({ role: 'user', content: [{ type: 'text', text: 'Hi' }] });
 		expect(calls.map((call) => call.method)).toEqual(['GET', 'POST']);
+	});
+});
+
+describe('SummaryAwareWindowedChatMemory with a summary view', () => {
+	const RESULT_PATH = '/summary-views/sv-1/result';
+	const session = {
+		[`GET ${SESSION_PATH}`]: {
+			events: [event('e1', 'USER', 'Hi')],
+			summary: { text: 'Earlier turns', summarizedUpToEventId: 'e0' },
+		},
+	};
+	const ready = {
+		[`GET ${RESULT_PATH}`]: { status: 'READY', value: { text: 'Vegetarian, in Sofia.' } },
+	};
+	const options = { windowSize: 10, includeSummary: true, summaryViewId: 'sv-1' };
+
+	it("reads the view's result for the user and puts it after recall, before the summary", async () => {
+		const { request, calls } = fakeRequest({
+			...session,
+			...ready,
+			'POST /memories/search': { items: [{ memoryId: 'm1', text: 'Likes spicy food' }] },
+		});
+		const memory = new SummaryAwareWindowedChatMemory(history(request), {
+			...options,
+			recall: { query: 'food', limit: 5 },
+		});
+
+		const messages = await memory.loadMessages();
+
+		expect(calls.find((call) => call.path === RESULT_PATH)).toEqual({
+			method: 'GET',
+			path: RESULT_PATH,
+			qs: { ownerId: 'user-1' },
+			allowNotFound: true,
+		});
+		expect(messages.map((m) => m.id)).toEqual([
+			RECALL_MESSAGE_ID,
+			SUMMARY_VIEW_MESSAGE_ID,
+			SUMMARY_MESSAGE_ID,
+			'e1',
+		]);
+		expect(messages[1].role).toBe('user');
+		expect(text(messages[1])).toBe(
+			'What is known about the user, summarized from earlier conversations:\nVegetarian, in Sofia.',
+		);
+	});
+
+	it('adds nothing while the result is not READY, and when the view does not exist', async () => {
+		for (const result of [
+			{ status: 'COLD' },
+			{ status: 'FAILED', errorCode: 'GENERATION_FAILED' },
+		]) {
+			const { request } = fakeRequest({ ...session, [`GET ${RESULT_PATH}`]: result });
+			const memory = new SummaryAwareWindowedChatMemory(history(request), options);
+			expect((await memory.loadMessages()).map((m) => m.id)).toEqual([SUMMARY_MESSAGE_ID, 'e1']);
+		}
+		// No canned result: the fake answers a not-found with undefined, as the adapter does.
+		const { request, calls } = fakeRequest(session);
+		const memory = new SummaryAwareWindowedChatMemory(history(request), options);
+		expect((await memory.loadMessages()).map((m) => m.id)).toEqual([SUMMARY_MESSAGE_ID, 'e1']);
+		expect(calls.map((call) => call.path)).toEqual([SESSION_PATH, RESULT_PATH]);
+	});
+
+	it('sends a structured summary as JSON', async () => {
+		const { request } = fakeRequest({
+			...session,
+			[`GET ${RESULT_PATH}`]: { status: 'READY', value: { data: { city: 'Sofia' } } },
+		});
+		const memory = new SummaryAwareWindowedChatMemory(history(request), options);
+
+		const [briefing] = await memory.loadMessages();
+
+		expect(briefing.id).toBe(SUMMARY_VIEW_MESSAGE_ID);
+		expect(text(briefing)).toContain('{"city":"Sofia"}');
+	});
+
+	it('does not read a view when none is set', async () => {
+		const { request, calls } = fakeRequest({ ...session, ...ready });
+		const memory = new SummaryAwareWindowedChatMemory(history(request), {
+			windowSize: 10,
+			includeSummary: true,
+		});
+
+		await memory.loadMessages();
+
+		expect(calls.map((call) => call.path)).toEqual([SESSION_PATH]);
 	});
 });
 
