@@ -1,5 +1,6 @@
 import type { AgentMemorySessionResponse } from '../../nodes/RedisAgentMemoryChatMemory/memory';
 import {
+	AGENT_MEMORY_API_PREFIX,
 	NOT_FOUND_ERROR_TYPE,
 	type AgentMemoryRequest,
 } from '../../nodes/shared/agentMemoryRequest';
@@ -35,13 +36,18 @@ export class AgentMemoryTestClient {
 
 	constructor(private readonly config: AgentMemoryTestConfig) {}
 
+	/** The store's base URL, built as the node's adapter builds it. */
+	private storeUrl(path: string): string {
+		return `${this.config.serverUrl}${AGENT_MEMORY_API_PREFIX}/stores/${encodeURIComponent(this.config.storeId)}${path}`;
+	}
+
 	readonly request: AgentMemoryRequest = async <T>({
 		method,
 		path,
 		body,
 		allowNotFound,
 	}: Parameters<AgentMemoryRequest>[0]) => {
-		const url = `${this.config.serverUrl}/v1/stores/${encodeURIComponent(this.config.storeId)}${path}`;
+		const url = this.storeUrl(path);
 		const response = await fetch(url, {
 			method,
 			headers: {
@@ -59,8 +65,7 @@ export class AgentMemoryTestClient {
 
 	/** One raw call, for tests that pin a status code or an error body. */
 	async probe(method: string, path: string): Promise<{ status: number; body: string }> {
-		const url = `${this.config.serverUrl}/v1/stores/${encodeURIComponent(this.config.storeId)}${path}`;
-		const response = await fetch(url, {
+		const response = await fetch(this.storeUrl(path), {
 			method,
 			headers: { Authorization: `Bearer ${this.config.apiKey}`, Accept: 'application/json' },
 		});
@@ -77,7 +82,7 @@ export class AgentMemoryTestClient {
 	async getSession(sessionId: string): Promise<AgentMemorySessionResponse | undefined> {
 		return await this.request<AgentMemorySessionResponse>({
 			method: 'GET',
-			path: `/session-memory/${encodeURIComponent(sessionId)}`,
+			path: `/sessions/${encodeURIComponent(sessionId)}`,
 			allowNotFound: true,
 		});
 	}
@@ -93,7 +98,7 @@ export class AgentMemoryTestClient {
 		for (const sessionId of this.createdSessions) {
 			await this.request({
 				method: 'DELETE',
-				path: `/session-memory/${encodeURIComponent(sessionId)}`,
+				path: `/sessions/${encodeURIComponent(sessionId)}`,
 				allowNotFound: true,
 			}).catch((error: unknown) => failures.push(error));
 		}
@@ -118,16 +123,16 @@ export class AgentMemoryTestClient {
 		// Re-read the first page after each delete, since deleting shifts the
 		// pages. The bound stops a loop if deletes silently fail.
 		for (let batch = 0; batch < 50; batch++) {
-			const page = await this.request<{ items: Array<{ id: string }> }>({
+			const page = await this.request<{ items: Array<{ memoryId: string }> }>({
 				method: 'POST',
-				path: '/long-term-memory/search',
+				path: '/memories/search',
 				body: { filter: { ownerId: { in: ownerIds } }, limit: 100 },
 			});
-			const ids = (page?.items ?? []).map((item) => item.id);
+			const ids = (page?.items ?? []).map((item) => item.memoryId);
 			if (ids.length === 0) return;
 			await this.request({
-				method: 'DELETE',
-				path: '/long-term-memory',
+				method: 'POST',
+				path: '/memories/bulk-delete',
 				body: { memoryIds: ids },
 			});
 		}

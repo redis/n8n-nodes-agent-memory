@@ -12,6 +12,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import {
 	AGENT_MEMORY_CREDENTIAL,
 	createAgentMemoryRequest,
+	newIdempotencyKey,
 	type AgentMemoryRequest,
 } from '../shared/agentMemoryRequest';
 import {
@@ -32,7 +33,7 @@ const MAX_SEARCH_PAGES = 10;
 
 interface Page<T> {
 	items: T[];
-	nextPageToken?: string;
+	nextCursor?: string;
 }
 
 /** The namespace endpoints wrap their record. */
@@ -40,19 +41,24 @@ interface NamespaceResponse {
 	namespace: IDataObject;
 }
 
-/** A session as `GET /session-memory/{id}` returns it, as far as Simplify reads it. */
+/** A session as `GET /sessions/{id}` returns it, as far as Simplify reads it. */
 interface SessionResponse extends IDataObject {
 	events?: Array<IDataObject & { content?: Array<{ text?: string }> }>;
 	summary?: { text?: string };
-	namespaceRef?: { namespaceId?: string };
+	namespaceId?: string;
 }
 
-/** Response of the bulk create, delete and move endpoints. */
+/** Response of the bulk delete and move endpoints; a failed ID comes with its own Problem Details. */
 interface BulkResult {
-	created?: string[];
 	deleted?: string[];
 	moved?: string[];
-	errors?: Array<{ id: string; error: string }>;
+	errors?: Array<{ memoryId: string; title?: string; detail?: string; status?: number }>;
+}
+
+/** Response of `PUT /memories/{memoryId}`. */
+interface UpsertResult {
+	memoryId: string;
+	created: boolean;
 }
 
 /** Fields shared by the memory filters, the create fields and the update fields. */
@@ -96,7 +102,7 @@ function memoryFilter(fields: MemoryFields): IDataObject {
 	const memoryType = optional(fields.memoryType);
 	const topics = splitList(fields.topics);
 	if (ownerId) filter.ownerId = { eq: ownerId };
-	if (namespaceId) filter.namespaceRef = { eq: namespaceId };
+	if (namespaceId) filter.namespaceId = { eq: namespaceId };
 	if (sessionId) filter.sessionId = { eq: sessionId };
 	if (memoryType) filter.memoryType = { eq: memoryType };
 	if (topics) filter.topics = { in: topics };
@@ -115,7 +121,7 @@ function memoryRecordFields(fields: MemoryFields): IDataObject {
 	if (text) record.text = text;
 	if (ownerId) record.ownerId = ownerId;
 	if (memoryType) record.memoryType = memoryType;
-	if (namespaceId) record.namespaceRef = { namespaceId };
+	if (namespaceId) record.namespaceId = namespaceId;
 	if (sessionId) record.sessionId = sessionId;
 	if (topics) record.topics = topics;
 	return record;
@@ -129,19 +135,17 @@ function compact(record: Record<string, unknown>): IDataObject {
 }
 
 /**
- * The fields of a memory most workflows read, flat: `namespaceRef` becomes
- * `namespaceId`. Create's echo of its request body maps the same way, so
- * Create and Get agree.
+ * The fields of a memory most workflows read. Create's echo of its request
+ * body has the same keys, so Create and Get agree.
  */
 function simplifyMemory(memory: IDataObject): IDataObject {
-	const namespaceRef = memory.namespaceRef as { namespaceId?: string } | undefined;
 	return compact({
-		id: memory.id,
+		memoryId: memory.memoryId,
 		text: memory.text,
 		ownerId: memory.ownerId,
 		memoryType: memory.memoryType,
 		topics: memory.topics,
-		namespaceId: namespaceRef?.namespaceId,
+		namespaceId: memory.namespaceId,
 		sessionId: memory.sessionId,
 		createdAt: memory.createdAt,
 	});
@@ -164,7 +168,7 @@ function simplifySession(session: SessionResponse): IDataObject {
 	return compact({
 		sessionId: session.sessionId,
 		ownerId: session.ownerId,
-		namespaceId: session.namespaceRef?.namespaceId,
+		namespaceId: session.namespaceId,
 		summary: session.summary?.text,
 		events: (session.events ?? []).map((event) =>
 			compact({
@@ -183,37 +187,41 @@ function generateMemoryId(): string {
 	return `n8n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** Follows `nextPageToken` until the pages run out or `max` items are collected. */
+/** Follows `nextCursor` until the pages run out or `max` items are collected. */
 async function collectPages<T>(
-	fetchPage: (pageToken: string | undefined) => Promise<Page<T> | undefined>,
+	fetchPage: (cursor: string | undefined) => Promise<Page<T> | undefined>,
 	max: number | undefined,
 ): Promise<T[]> {
 	const items: T[] = [];
-	let pageToken: string | undefined;
+	let cursor: string | undefined;
 	do {
-		const page = await fetchPage(pageToken);
+		const page = await fetchPage(cursor);
 		items.push(...(page?.items ?? []));
-		pageToken = page?.nextPageToken;
-	} while (pageToken && (max === undefined || items.length < max));
+		cursor = page?.nextCursor;
+	} while (cursor && (max === undefined || items.length < max));
 	return max === undefined ? items : items.slice(0, max);
 }
 
-/** Fails when a bulk endpoint did not apply the operation to `id`. */
+/** Fails when a bulk endpoint did not apply the operation to `memoryId`. */
 function assertBulkApplied(
 	node: INode,
 	itemIndex: number,
 	result: BulkResult | undefined,
-	key: 'created' | 'deleted' | 'moved',
-	id: string,
+	key: 'deleted' | 'moved',
+	memoryId: string,
 ): void {
-	const failure = result?.errors?.find((error) => error.id === id);
+	const failure = result?.errors?.find((error) => error.memoryId === memoryId);
 	if (failure) {
-		throw new NodeOperationError(node, `Memory "${id}" was not ${key}: ${failure.error}`, {
+		const reason = failure.detail ?? failure.title ?? 'the server gave no reason';
+		throw new NodeOperationError(node, `Memory "${memoryId}" was not ${key}: ${reason}`, {
 			itemIndex,
+			...(failure.title && failure.detail
+				? { description: `${failure.title}${failure.status ? ` (HTTP ${failure.status})` : ''}` }
+				: {}),
 		});
 	}
-	if (!result?.[key]?.includes(id)) {
-		throw new NodeOperationError(node, `Memory "${id}" was not ${key}`, {
+	if (!result?.[key]?.includes(memoryId)) {
+		throw new NodeOperationError(node, `Memory "${memoryId}" was not ${key}`, {
 			itemIndex,
 			description: 'The server accepted the request, but its response does not list the ID',
 		});
@@ -330,22 +338,22 @@ async function searchNamespaces(
 	const request = await createAgentMemoryRequest(this, 0);
 	const needle = (filter ?? '').trim().toLowerCase();
 	const results: INodeListSearchResult['results'] = [];
-	let pageToken = paginationToken;
+	let cursor = paginationToken;
 	for (let pages = 0; pages < (needle ? MAX_SEARCH_PAGES : 1); pages++) {
 		const page = await request<Page<IDataObject>>({
 			method: 'GET',
 			path: '/namespaces',
-			qs: { limit: MAX_PAGE_SIZE, ...(pageToken ? { pageToken } : {}) },
+			qs: { limit: MAX_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
 		});
 		for (const namespace of page?.items ?? []) {
 			const name = String(namespace.name ?? namespace.namespaceId ?? '');
 			if (needle && !name.toLowerCase().includes(needle)) continue;
 			results.push({ name, value: String(namespace.namespaceId) });
 		}
-		pageToken = page?.nextPageToken;
-		if (!pageToken) break;
+		cursor = page?.nextCursor;
+		if (!cursor) break;
 	}
-	return { results, ...(pageToken ? { paginationToken: pageToken } : {}) };
+	return { results, ...(cursor ? { paginationToken: cursor } : {}) };
 }
 
 /** The operations for one input item. Errors from the API arrive as `NodeApiError`s from `request`. */
@@ -439,7 +447,7 @@ class Operations {
 	 * The User ID is the one search filter the user must never be able to
 	 * loosen. The API applies a single conjunction to every filter field, so a
 	 * "match any" request would OR the owner away and return other users'
-	 * memories. Search therefore sends no `filterOp`, and this check refuses to
+	 * memories. Search therefore sends no `filter.op`, and this check refuses to
 	 * pass on a memory of another user should the store return one anyway.
 	 */
 	private ownedBy(items: IDataObject[], ownerId: string): IDataObject[] {
@@ -483,14 +491,14 @@ class Operations {
 				// here. It is left out on purpose; see `ownedBy`.
 				const options = this.param<MemoryFields & { similarityThreshold?: number }>('options', {});
 				const body: IDataObject = {
-					text: query,
+					query,
 					limit: maxResults,
 					filter: memoryFilter({ ...options, ownerId }),
 				};
-				if (options.similarityThreshold) body.similarityThreshold = options.similarityThreshold;
+				if (options.similarityThreshold) body.minScore = options.similarityThreshold;
 				const page = await this.request<Page<IDataObject>>({
 					method: 'POST',
-					path: '/long-term-memory/search',
+					path: '/memories/search',
 					body,
 				});
 				return this.memoriesFound(this.memories(this.ownedBy(page?.items ?? [], ownerId)));
@@ -505,11 +513,11 @@ class Operations {
 				}
 				const { pageSize, max } = this.paging();
 				const memories = await collectPages<IDataObject>(
-					async (pageToken) =>
+					async (cursor) =>
 						await this.request<Page<IDataObject>>({
 							method: 'POST',
-							path: '/long-term-memory/search',
-							body: { filter, limit: pageSize, ...(pageToken ? { pageToken } : {}) },
+							path: '/memories/search',
+							body: { filter, limit: pageSize, ...(cursor ? { cursor } : {}) },
 						}),
 					max,
 				);
@@ -519,21 +527,29 @@ class Operations {
 				const text = this.required('text', 'Text');
 				const ownerId = this.required('ownerId', 'User ID');
 				const additionalFields = this.param<MemoryFields>('additionalFields', {});
-				const id = optional(additionalFields.id) ?? generateMemoryId();
-				const memory = { id, ...memoryRecordFields({ ...additionalFields, text, ownerId }) };
-				const result = await this.request<BulkResult>({
-					method: 'POST',
-					path: '/long-term-memory',
-					body: { memories: [memory] },
+				const memoryId = optional(additionalFields.id) ?? generateMemoryId();
+				const fields = memoryRecordFields({ ...additionalFields, text, ownerId });
+				// The upsert creates the memory or, when the ID exists, replaces it,
+				// which is what the Memory ID field promises. The bulk endpoint would
+				// refuse an existing ID instead.
+				const result = await this.request<UpsertResult>({
+					method: 'PUT',
+					path: `/memories/${encodeURIComponent(memoryId)}`,
+					body: { idempotencyKey: newIdempotencyKey(), ...fields },
 				});
-				assertBulkApplied(this.node, this.itemIndex, result, 'created', id);
-				return this.memory(memory);
+				if (result?.memoryId !== memoryId) {
+					throw new NodeOperationError(this.node, `Memory "${memoryId}" was not created`, {
+						itemIndex: this.itemIndex,
+						description: 'The server accepted the request, but its response does not name the ID',
+					});
+				}
+				return this.memory({ memoryId, ...fields });
 			}
 			case 'get': {
 				const memoryId = this.required('memoryId', 'Memory ID');
 				const memory = await this.request<IDataObject>({
 					method: 'GET',
-					path: `/long-term-memory/${encodeURIComponent(memoryId)}`,
+					path: `/memories/${encodeURIComponent(memoryId)}`,
 				});
 				return this.memory(memory);
 			}
@@ -550,31 +566,31 @@ class Operations {
 				}
 				const updated = await this.request<IDataObject>({
 					method: 'PATCH',
-					path: `/long-term-memory/${encodeURIComponent(memoryId)}`,
-					body: changes,
+					path: `/memories/${encodeURIComponent(memoryId)}`,
+					body: { idempotencyKey: newIdempotencyKey(), ...changes },
 				});
 				return this.memory(updated);
 			}
 			case 'delete': {
 				const memoryId = this.required('memoryId', 'Memory ID');
 				const result = await this.request<BulkResult>({
-					method: 'DELETE',
-					path: '/long-term-memory',
+					method: 'POST',
+					path: '/memories/bulk-delete',
 					body: { memoryIds: [memoryId] },
 				});
 				assertBulkApplied(this.node, this.itemIndex, result, 'deleted', memoryId);
-				return { deleted: true, id: memoryId };
+				return { deleted: true, memoryId };
 			}
 			case 'move': {
 				const memoryId = this.required('memoryId', 'Memory ID');
 				const namespaceId = this.required('namespaceId', 'Namespace');
 				const result = await this.request<BulkResult>({
 					method: 'POST',
-					path: '/long-term-memory/move',
-					body: { memoryIds: [memoryId], namespaceRef: { namespaceId } },
+					path: '/memories/move',
+					body: { memoryIds: [memoryId], namespaceId },
 				});
 				assertBulkApplied(this.node, this.itemIndex, result, 'moved', memoryId);
-				return { moved: true, id: memoryId, namespaceId };
+				return { moved: true, memoryId, namespaceId };
 			}
 			default:
 				return this.unknownOperation('longTermMemory', operation);
@@ -588,7 +604,7 @@ class Operations {
 				const options = this.param<{ includeSummarisedEvents?: boolean }>('options', {});
 				const session = await this.request<SessionResponse>({
 					method: 'GET',
-					path: `/session-memory/${encodeURIComponent(sessionId)}`,
+					path: `/sessions/${encodeURIComponent(sessionId)}`,
 					...(options.includeSummarisedEvents ? { qs: { includeSummarisedEvents: true } } : {}),
 				});
 				return this.simple ? simplifySession(session ?? {}) : (session ?? {});
@@ -597,27 +613,27 @@ class Operations {
 				const filters = this.param<{ ownerId?: string }>('filters', {});
 				const ownerId = optional(filters.ownerId);
 				const { pageSize, max } = this.paging();
-				const sessionIds = await collectPages<string>(
-					async (pageToken) =>
-						await this.request<Page<string>>({
+				// Each item is `{ sessionId, ownerId?, namespaceId?, createdAt?, updatedAt? }`.
+				return await collectPages<IDataObject>(
+					async (cursor) =>
+						await this.request<Page<IDataObject>>({
 							method: 'GET',
-							path: '/session-memory',
+							path: '/sessions',
 							// The API needs a filter or an explicit `includeAll`.
 							qs: {
 								limit: pageSize,
-								...(ownerId ? { filterOwnerId: ownerId } : { includeAll: true }),
-								...(pageToken ? { pageToken } : {}),
+								...(ownerId ? { ownerId } : { includeAll: true }),
+								...(cursor ? { cursor } : {}),
 							},
 						}),
 					max,
 				);
-				return sessionIds.map((sessionId) => ({ sessionId }));
 			}
 			case 'delete': {
 				const sessionId = this.required('sessionId', 'Session ID');
 				await this.request({
 					method: 'DELETE',
-					path: `/session-memory/${encodeURIComponent(sessionId)}`,
+					path: `/sessions/${encodeURIComponent(sessionId)}`,
 				});
 				return { deleted: true, sessionId };
 			}
@@ -639,16 +655,17 @@ class Operations {
 					);
 				}
 				const namespaceId = optional(additionalFields.namespaceId);
+				// The server creates the session on its first event.
 				const result = await this.request<{ event: IDataObject }>({
 					method: 'POST',
-					path: '/session-memory/events',
+					path: `/sessions/${encodeURIComponent(sessionId)}/events`,
 					body: {
-						sessionId,
+						idempotencyKey: newIdempotencyKey(),
 						actorId,
 						role,
 						content: [{ text }],
 						createdAt: new Date(createdAtMs).toISOString(),
-						...(namespaceId ? { namespaceRef: { namespaceId } } : {}),
+						...(namespaceId ? { namespaceId } : {}),
 					},
 				});
 				return result?.event ?? {};
@@ -658,7 +675,7 @@ class Operations {
 				const eventId = this.required('eventId', 'Event ID');
 				await this.request({
 					method: 'DELETE',
-					path: `/session-memory/${encodeURIComponent(sessionId)}/events/${encodeURIComponent(eventId)}`,
+					path: `/sessions/${encodeURIComponent(sessionId)}/events/${encodeURIComponent(eventId)}`,
 				});
 				return { deleted: true, sessionId, eventId };
 			}
@@ -704,11 +721,11 @@ class Operations {
 			case 'getAll': {
 				const { pageSize, max } = this.paging();
 				const namespaces = await collectPages<IDataObject>(
-					async (pageToken) =>
+					async (cursor) =>
 						await this.request<Page<IDataObject>>({
 							method: 'GET',
 							path: '/namespaces',
-							qs: { limit: pageSize, ...(pageToken ? { pageToken } : {}) },
+							qs: { limit: pageSize, ...(cursor ? { cursor } : {}) },
 						}),
 					max,
 				);

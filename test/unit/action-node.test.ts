@@ -29,7 +29,10 @@ const NODE: INode = {
 /** The same node, as the AI Agent runs it: n8n appends `Tool` to the type. */
 const TOOL_NODE: INode = { ...NODE, type: `${NODE.type}Tool` };
 
-const BASE = 'https://memory.example.com/v1/stores/store-1';
+const BASE = 'https://memory.example.com/iris/data/v1/agent-memory/stores/store-1';
+
+/** Every write carries a fresh idempotency key; the tests only check that one is there. */
+const ANY_KEY = expect.any(String) as string;
 
 function httpError(status: number, message = `Request failed with status code ${status}`) {
 	return Object.assign(new Error(message), { httpCode: String(status), response: { status } });
@@ -76,32 +79,31 @@ async function run({
 	};
 }
 
-const record = (id: string, text: string) => ({
-	id,
+const record = (memoryId: string, text: string) => ({
+	memoryId,
 	text,
 	ownerId: 'user-1',
 	createdAt: 'x',
 	updatedAt: 'x',
 });
 
-/** A memory as the API returns it, with the fields Simplify drops or flattens. */
+/** A memory as the API returns it, with the fields Simplify drops. */
 const fullRecord = {
-	id: 'm1',
+	memoryId: 'm1',
 	text: 'Likes spicy food',
 	ownerId: 'user-1',
 	memoryType: 'semantic',
 	topics: ['food'],
-	namespaceRef: { namespaceId: 'ns-1', name: 'support', path: 'support' },
+	namespaceId: 'ns-1',
 	sessionId: 's1',
 	createdAt: '2026-11-04T10:00:00Z',
 	updatedAt: '2026-11-04T10:00:00Z',
-	revision: 1,
-	embedding: [0.1, 0.2],
+	revision: '64ce1ff4a9d94cb58df95b4abf014396',
 };
 
 /** The same memory with Simplify on. */
 const simpleRecord = {
-	id: 'm1',
+	memoryId: 'm1',
 	text: 'Likes spicy food',
 	ownerId: 'user-1',
 	memoryType: 'semantic',
@@ -132,14 +134,14 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		expect(requests).toHaveLength(1);
 		expect(requests[0]).toMatchObject({
 			method: 'POST',
-			url: `${BASE}/long-term-memory/search`,
+			url: `${BASE}/memories/search`,
 			body: {
-				text: 'What food does the user like?',
+				query: 'What food does the user like?',
 				limit: 3,
-				similarityThreshold: 0.4,
+				minScore: 0.4,
 				filter: {
 					ownerId: { eq: 'user-1' },
-					namespaceRef: { eq: 'ns-1' },
+					namespaceId: { eq: 'ns-1' },
 					topics: { in: ['food', 'travel'] },
 				},
 			},
@@ -184,7 +186,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 
 		expect(requests[0].body).toEqual({
-			text: 'q',
+			query: 'q',
 			limit: 10,
 			filter: { ownerId: { eq: 'user-1' } },
 		});
@@ -297,10 +299,10 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 	});
 
-	it('gets many by following page tokens until the limit', async () => {
+	it('gets many by following cursors until the limit', async () => {
 		const pages = [
-			{ items: [record('m1', 'a'), record('m2', 'b')], nextPageToken: 'p2' },
-			{ items: [record('m3', 'c'), record('m4', 'd')], nextPageToken: 'p3' },
+			{ items: [record('m1', 'a'), record('m2', 'b')], nextCursor: 'p2' },
+			{ items: [record('m3', 'c'), record('m4', 'd')], nextCursor: 'p3' },
 		];
 		const { output, requests } = await run({
 			parameters: {
@@ -318,15 +320,19 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			{
 				filter: { ownerId: { eq: 'user-1' }, memoryType: { eq: 'preference' } },
 				limit: 3,
-				pageToken: 'p2',
+				cursor: 'p2',
 			},
 		]);
-		expect(output.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+		expect(requests.map((r) => r.url)).toEqual([
+			`${BASE}/memories/search`,
+			`${BASE}/memories/search`,
+		]);
+		expect(output.map((m) => m.memoryId)).toEqual(['m1', 'm2', 'm3']);
 	});
 
 	it('gets all pages when Return All is on', async () => {
 		const pages = [
-			{ items: [record('m1', 'a')], nextPageToken: 'p2' },
+			{ items: [record('m1', 'a')], nextCursor: 'p2' },
 			{ items: [record('m2', 'b')] },
 		];
 		const { output, requests } = await run({
@@ -340,10 +346,14 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 
 		expect(requests.map((r) => (r.body as { limit: number }).limit)).toEqual([100, 100]);
-		expect(output.map((m) => m.id)).toEqual(['m1', 'm2']);
+		expect(output.map((m) => m.memoryId)).toEqual(['m1', 'm2']);
 	});
 
-	it('creates a memory with a generated ID and returns what it stored', async () => {
+	/** The memory ID at the end of an upsert URL. */
+	const idInUrl = (url: string | undefined) =>
+		decodeURIComponent(String(url).split('/').pop() ?? '');
+
+	it('creates a memory with a generated ID through the upsert and returns what it stored', async () => {
 		const { output, requests } = await run({
 			parameters: {
 				resource: 'longTermMemory',
@@ -352,27 +362,27 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				ownerId: 'user-1',
 				additionalFields: { memoryType: 'preference', topics: 'food', namespaceId: 'ns-1' },
 			},
-			respond: (options) => {
-				const [memory] = (options.body as { memories: Array<{ id: string }> }).memories;
-				return { created: [memory.id] };
-			},
+			respond: (options) => ({ memoryId: idInUrl(options.url), created: true }),
 		});
 
-		const [memory] = (requests[0].body as { memories: Array<Record<string, unknown>> }).memories;
-		expect(requests[0]).toMatchObject({ method: 'POST', url: `${BASE}/long-term-memory` });
-		expect(memory.id).toMatch(/^n8n-[a-z0-9]+-[a-z0-9]+$/);
-		expect(memory).toEqual({
-			id: memory.id,
-			text: 'The user is vegetarian',
-			ownerId: 'user-1',
-			memoryType: 'preference',
-			topics: ['food'],
-			namespaceRef: { namespaceId: 'ns-1' },
+		const memoryId = idInUrl(requests[0].url);
+		expect(memoryId).toMatch(/^n8n-[a-z0-9]+-[a-z0-9]+$/);
+		expect(requests[0]).toMatchObject({
+			method: 'PUT',
+			url: `${BASE}/memories/${memoryId}`,
+			body: {
+				idempotencyKey: ANY_KEY,
+				text: 'The user is vegetarian',
+				ownerId: 'user-1',
+				memoryType: 'preference',
+				topics: ['food'],
+				namespaceId: 'ns-1',
+			},
 		});
-		// Create echoes its request body through the same mapper as Get, so the
-		// two agree: `namespaceRef` becomes `namespaceId`, and there is no `createdAt`.
+		// Create echoes what it sent through the same mapper as Get, so the two
+		// agree; there is no `createdAt` and no idempotency key in the output.
 		expect(output[0]).toEqual({
-			id: memory.id,
+			memoryId,
 			text: 'The user is vegetarian',
 			ownerId: 'user-1',
 			memoryType: 'preference',
@@ -381,7 +391,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 	});
 
-	it('returns the request body as sent from Create with Simplify off', async () => {
+	it('returns the record as sent from Create with Simplify off', async () => {
 		const { output, requests } = await run({
 			parameters: {
 				resource: 'longTermMemory',
@@ -389,17 +399,21 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				text: 'x',
 				ownerId: 'user-1',
 				simple: false,
-				additionalFields: { id: 'mem-1', namespaceId: 'ns-1' },
+				additionalFields: { id: 'mem 1', namespaceId: 'ns-1' },
 			},
-			respond: () => ({ created: ['mem-1'] }),
+			respond: () => ({ memoryId: 'mem 1', created: false }),
 		});
 
-		const [memory] = (requests[0].body as { memories: Array<Record<string, unknown>> }).memories;
-		expect(output[0]).toEqual(memory);
-		expect(output[0]).toMatchObject({ namespaceRef: { namespaceId: 'ns-1' } });
+		expect(requests[0]).toMatchObject({ method: 'PUT', url: `${BASE}/memories/mem%201` });
+		expect(output[0]).toEqual({
+			memoryId: 'mem 1',
+			text: 'x',
+			ownerId: 'user-1',
+			namespaceId: 'ns-1',
+		});
 	});
 
-	it('uses the given memory ID and reports a per-record error', async () => {
+	it('fails when the upsert response names another memory', async () => {
 		await expect(
 			run({
 				parameters: {
@@ -409,9 +423,9 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 					ownerId: 'user-1',
 					additionalFields: { id: 'mem-1' },
 				},
-				respond: () => ({ created: [], errors: [{ id: 'mem-1', error: 'duplicate' }] }),
+				respond: () => ({ memoryId: 'mem-2', created: true }),
 			}),
-		).rejects.toThrow('Memory "mem-1" was not created: duplicate');
+		).rejects.toThrow('Memory "mem-1" was not created');
 	});
 
 	it('gets, updates, deletes and moves one memory by ID', async () => {
@@ -419,7 +433,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			parameters: { resource: 'longTermMemory', operation: 'get', memoryId: 'm 1' },
 			respond: () => fullRecord,
 		});
-		expect(get.requests[0]).toMatchObject({ method: 'GET', url: `${BASE}/long-term-memory/m%201` });
+		expect(get.requests[0]).toMatchObject({ method: 'GET', url: `${BASE}/memories/m%201` });
 		expect(get.output).toEqual([simpleRecord]);
 
 		const rawGet = await run({
@@ -439,8 +453,8 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 		expect(update.requests[0]).toMatchObject({
 			method: 'PATCH',
-			url: `${BASE}/long-term-memory/m1`,
-			body: { text: 'b', topics: ['x', 'y'], ownerId: 'user-2' },
+			url: `${BASE}/memories/m1`,
+			body: { idempotencyKey: ANY_KEY, text: 'b', topics: ['x', 'y'], ownerId: 'user-2' },
 		});
 		expect(update.output).toEqual([{ ...simpleRecord, text: 'b' }]);
 
@@ -449,11 +463,11 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 			respond: () => ({ deleted: ['m1'] }),
 		});
 		expect(del.requests[0]).toMatchObject({
-			method: 'DELETE',
-			url: `${BASE}/long-term-memory`,
+			method: 'POST',
+			url: `${BASE}/memories/bulk-delete`,
 			body: { memoryIds: ['m1'] },
 		});
-		expect(del.output).toEqual([{ deleted: true, id: 'm1' }]);
+		expect(del.output).toEqual([{ deleted: true, memoryId: 'm1' }]);
 
 		// `namespaceId` is a Namespace locator; the stub hands over its extracted value.
 		const move = await run({
@@ -467,10 +481,10 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		});
 		expect(move.requests[0]).toMatchObject({
 			method: 'POST',
-			url: `${BASE}/long-term-memory/move`,
-			body: { memoryIds: ['m1'], namespaceRef: { namespaceId: 'ns-2' } },
+			url: `${BASE}/memories/move`,
+			body: { memoryIds: ['m1'], namespaceId: 'ns-2' },
 		});
-		expect(move.output).toEqual([{ moved: true, id: 'm1', namespaceId: 'ns-2' }]);
+		expect(move.output).toEqual([{ moved: true, memoryId: 'm1', namespaceId: 'ns-2' }]);
 	});
 
 	it('fails when the bulk response does not list the ID', async () => {
@@ -480,6 +494,36 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				respond: () => ({ deleted: [] }),
 			}),
 		).rejects.toThrow('Memory "m1" was not deleted');
+	});
+
+	it("quotes the bulk response's own reason when it names the ID as failed", async () => {
+		const call = run({
+			parameters: {
+				resource: 'longTermMemory',
+				operation: 'move',
+				memoryId: 'm1',
+				namespaceId: 'ns-2',
+			},
+			respond: () => ({
+				moved: [],
+				errors: [
+					{
+						memoryId: 'm1',
+						type: '/errors/conflict',
+						title: 'Namespace Conflict',
+						status: 409,
+						detail: 'The destination namespace is archived',
+					},
+				],
+			}),
+		});
+
+		await expect(call).rejects.toMatchObject({
+			name: 'NodeOperationError',
+			message: 'Memory "m1" was not moved: The destination namespace is archived',
+			description: 'Namespace Conflict (HTTP 409)',
+			context: { itemIndex: 0 },
+		});
 	});
 
 	it('refuses an update with no Update Fields before calling the API', async () => {
@@ -519,8 +563,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 const fullSession = {
 	sessionId: 's1',
 	ownerId: 'user-1',
-	namespaceRef: { namespaceId: 'ns-1', name: 'support', path: 'support' },
-	namespaceScope: 'SHARED',
+	namespaceId: 'ns-1',
 	summary: {
 		text: 'The user likes tea.',
 		summarizedUpToEventId: 'e0',
@@ -555,7 +598,7 @@ describe('RedisAgentMemory: Session', () => {
 
 		expect(requests[0]).toMatchObject({
 			method: 'GET',
-			url: `${BASE}/session-memory/s%2F1`,
+			url: `${BASE}/sessions/s%2F1`,
 			qs: { includeSummarisedEvents: true },
 		});
 		expect(output[0]).toEqual({ sessionId: 's/1', ownerId: 'user-1', events: [] });
@@ -601,7 +644,12 @@ describe('RedisAgentMemory: Session', () => {
 		expect(output[0]).not.toHaveProperty('namespaceId');
 	});
 
-	it('lists session IDs for a user as one item each', async () => {
+	it('lists the sessions of a user as one item each, with what the server knows about them', async () => {
+		const sessions = [
+			{ sessionId: 's1', ownerId: 'user-1', createdAt: 'x', updatedAt: 'y', namespaceId: 'ns-1' },
+			{ sessionId: 's2', ownerId: 'user-1' },
+			{ sessionId: 's3' },
+		];
 		const { output, requests } = await run({
 			parameters: {
 				resource: 'session',
@@ -610,22 +658,22 @@ describe('RedisAgentMemory: Session', () => {
 				limit: 2,
 				filters: { ownerId: 'user-1' },
 			},
-			respond: () => ({ items: ['s1', 's2', 's3'], total: 3 }),
+			respond: () => ({ items: sessions }),
 		});
 
 		expect(requests[0]).toMatchObject({
 			method: 'GET',
-			url: `${BASE}/session-memory`,
-			qs: { limit: 2, filterOwnerId: 'user-1' },
+			url: `${BASE}/sessions`,
+			qs: { limit: 2, ownerId: 'user-1' },
 		});
-		expect(output).toEqual([{ sessionId: 's1' }, { sessionId: 's2' }]);
+		expect(output).toEqual(sessions.slice(0, 2));
 		expect(requests[0].qs).not.toHaveProperty('includeAll');
 	});
 
 	it('lists every session with includeAll when no user is given', async () => {
 		const { requests } = await run({
 			parameters: { resource: 'session', operation: 'getAll', returnAll: true, filters: {} },
-			respond: () => ({ items: ['s1'], total: 1 }),
+			respond: () => ({ items: [{ sessionId: 's1' }] }),
 		});
 
 		expect(requests[0].qs).toEqual({ limit: 100, includeAll: true });
@@ -647,16 +695,17 @@ describe('RedisAgentMemory: Session', () => {
 
 		expect(requests[0]).toMatchObject({
 			method: 'POST',
-			url: `${BASE}/session-memory/events`,
+			url: `${BASE}/sessions/s1/events`,
 			body: {
-				sessionId: 's1',
+				idempotencyKey: ANY_KEY,
 				actorId: 'user-1',
 				role: 'ASSISTANT',
 				content: [{ text: 'Hello' }],
 				createdAt: '2026-11-02T10:00:00.000Z',
-				namespaceRef: { namespaceId: 'ns-1' },
+				namespaceId: 'ns-1',
 			},
 		});
+		expect(requests[0].body).not.toHaveProperty('sessionId');
 		expect(output).toEqual([{ eventId: 'e1', role: 'ASSISTANT' }]);
 	});
 
@@ -687,7 +736,7 @@ describe('RedisAgentMemory: Session', () => {
 		});
 		expect(session.requests[0]).toMatchObject({
 			method: 'DELETE',
-			url: `${BASE}/session-memory/s1`,
+			url: `${BASE}/sessions/s1`,
 		});
 		expect(session.output).toEqual([{ deleted: true, sessionId: 's1' }]);
 
@@ -702,7 +751,7 @@ describe('RedisAgentMemory: Session', () => {
 		});
 		expect(event.requests[0]).toMatchObject({
 			method: 'DELETE',
-			url: `${BASE}/session-memory/s1/events/e%201`,
+			url: `${BASE}/sessions/s1/events/e%201`,
 		});
 		expect(event.output).toEqual([{ deleted: true, sessionId: 's1', eventId: 'e 1' }]);
 	});
@@ -717,7 +766,7 @@ const fullNamespace = {
 	scope: 'PERSONAL',
 	state: 'ACTIVE',
 	ownerId: 'user-1',
-	revision: 1,
+	revision: '1dbf7898d45a455abcb7002350d1f50a',
 	createdAt: '2026-11-04T07:07:02.601Z',
 	updatedAt: '2026-11-04T07:07:02.601Z',
 };
@@ -913,7 +962,7 @@ describe('RedisAgentMemory: Namespace locator', () => {
 
 	/** Calls the list-search method with a fake `ILoadOptionsFunctions` and records the calls. */
 	async function search(
-		pages: Array<{ items: Array<{ namespaceId: string; name: string }>; nextPageToken?: string }>,
+		pages: Array<{ items: Array<{ namespaceId: string; name: string }>; nextCursor?: string }>,
 		filter?: string,
 		paginationToken?: string,
 	) {
@@ -929,7 +978,7 @@ describe('RedisAgentMemory: Namespace locator', () => {
 				async httpRequestWithAuthentication(_credentialType: string, options: IHttpRequestOptions) {
 					requests.push(options);
 					const index = pages.findIndex(
-						(_, i) => (i === 0 ? undefined : `p${i}`) === options.qs?.pageToken,
+						(_, i) => (i === 0 ? undefined : `p${i}`) === options.qs?.cursor,
 					);
 					return pages[index];
 				},
@@ -944,7 +993,7 @@ describe('RedisAgentMemory: Namespace locator', () => {
 
 	it('lists one page of namespaces with the token for the next', async () => {
 		const { result, requests } = await search([
-			{ items: [namespace(1), namespace(2)], nextPageToken: 'p1' },
+			{ items: [namespace(1), namespace(2)], nextCursor: 'p1' },
 			{ items: [namespace(3)] },
 		]);
 
@@ -965,29 +1014,29 @@ describe('RedisAgentMemory: Namespace locator', () => {
 
 	it('continues from the pagination token and ends without one on the last page', async () => {
 		const { result, requests } = await search(
-			[{ items: [namespace(1)], nextPageToken: 'p1' }, { items: [namespace(3)] }],
+			[{ items: [namespace(1)], nextCursor: 'p1' }, { items: [namespace(3)] }],
 			undefined,
 			'p1',
 		);
 
-		expect(requests[0].qs).toEqual({ limit: 100, pageToken: 'p1' });
+		expect(requests[0].qs).toEqual({ limit: 100, cursor: 'p1' });
 		expect(result).toEqual({ results: [{ name: 'Namespace 3', value: 'id-3' }] });
 	});
 
 	it('matches a filter against the name, in any case, across pages', async () => {
 		const { result, requests } = await search(
 			[
-				{ items: [namespace(1), { namespaceId: 'id-s', name: 'Support' }], nextPageToken: 'p1' },
+				{ items: [namespace(1), { namespaceId: 'id-s', name: 'Support' }], nextCursor: 'p1' },
 				{
 					items: [{ namespaceId: 'id-b', name: 'billing-support' }, namespace(2)],
-					nextPageToken: 'p2',
+					nextCursor: 'p2',
 				},
 				{ items: [namespace(3)] },
 			],
 			'SUPP',
 		);
 
-		expect(requests.map((r) => r.qs?.pageToken)).toEqual([undefined, 'p1', 'p2']);
+		expect(requests.map((r) => r.qs?.cursor)).toEqual([undefined, 'p1', 'p2']);
 		expect(result).toEqual({
 			results: [
 				{ name: 'Support', value: 'id-s' },
@@ -999,7 +1048,7 @@ describe('RedisAgentMemory: Namespace locator', () => {
 	it('stops a filtered search after ten pages and hands back the token', async () => {
 		const pages = Array.from({ length: 12 }, (_, i) => ({
 			items: [namespace(i)],
-			nextPageToken: `p${i + 1}`,
+			nextCursor: `p${i + 1}`,
 		}));
 
 		const { result, requests } = await search(pages, 'no such name');
@@ -1013,7 +1062,7 @@ describe('RedisAgentMemory: errors and items', () => {
 	it('pairs each output with its input item', async () => {
 		const { paired } = await run({
 			parameters: { resource: 'session', operation: 'getAll', returnAll: true, filters: {} },
-			respond: () => ({ items: ['a', 'b'], total: 2 }),
+			respond: () => ({ items: [{ sessionId: 'a' }, { sessionId: 'b' }] }),
 			items: 2,
 		});
 

@@ -230,11 +230,11 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 			const session = newChatSession('recall');
 			await client.request({
 				method: 'POST',
-				path: '/long-term-memory',
+				path: '/memories',
 				body: {
 					memories: [
 						{
-							id: `${session.sessionId}-m1`,
+							memoryId: `${session.sessionId}-m1`,
 							ownerId: session.userId,
 							text: 'The user is vegetarian',
 						},

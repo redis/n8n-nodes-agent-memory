@@ -25,7 +25,8 @@ export class RedisAgentMemoryApi implements ICredentialType {
 			default: '',
 			required: true,
 			placeholder: 'e.g. https://agent-memory.example.com',
-			description: 'Base URL of your Agent Memory service, without a trailing slash',
+			description:
+				'Base URL of your Agent Memory service: the host only, without a path or a trailing slash. The nodes add /iris/data/v1/agent-memory themselves.',
 		},
 		{
 			displayName: 'Store ID',
@@ -60,7 +61,7 @@ export class RedisAgentMemoryApi implements ICredentialType {
 			baseURL: '={{$credentials.serverUrl.replace(/\\/+$/, "")}}',
 			// Same encoding as the nodes' request adapter, so the test hits the URL
 			// the nodes will use.
-			url: '=/v1/stores/{{encodeURIComponent($credentials.storeId)}}/health',
+			url: '=/iris/data/v1/agent-memory/stores/{{encodeURIComponent($credentials.storeId)}}/health',
 			method: 'GET',
 		},
 		rules: [
@@ -72,6 +73,16 @@ export class RedisAgentMemoryApi implements ICredentialType {
 				properties: {
 					value: 403,
 					message: 'Forbidden: check the API Key, Server URL and Store ID',
+				},
+			},
+			{
+				// A Server URL that already carries a path, or a server on an older
+				// API, answers with an empty 404.
+				type: 'responseCode',
+				properties: {
+					value: 404,
+					message:
+						'Not found: check the Server URL. It must be the host only; the nodes add the API path themselves.',
 				},
 			},
 		],
