@@ -46,6 +46,15 @@ contract tests (create, get, list, update, delete, a cold result, the `202`
 on delete) run whenever the store is configured. Summary views must be
 enabled on the store; the hosted test store has them.
 
+A third opt-in, `AGENT_MEMORY_EXTRACTION_TESTS=true`, covers memory sources.
+It writes four events with plain facts to a fresh session, waits up to 180
+seconds for the server to extract memories from them (17 seconds to over two
+minutes on the hosted store), then checks that Get Sources names the session
+and its events, and that Search with Include Sources carries the same source.
+The contract and the e2e suites both have this test; CI sets the variable for
+both. The tests that need no extraction (no sources for a memory written
+directly, the error for a missing memory) always run.
+
 Every run prefixes the session and user IDs it creates with `it-<run>-<random>`,
 and deletes its sessions and the long-term memories of its users at the end.
 Concurrent runs on the shared store don't see each other's data. Long-term

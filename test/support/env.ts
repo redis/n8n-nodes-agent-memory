@@ -50,6 +50,13 @@ export const summaryTests = process.env.AGENT_MEMORY_SUMMARY_TESTS === 'true';
  */
 export const summaryViewTests = process.env.AGENT_MEMORY_SUMMARY_VIEW_TESTS === 'true';
 
+/**
+ * Opt-in for the tests that wait for the server to extract long-term memories
+ * from session events, which took from 17 seconds to over two minutes on the
+ * hosted store. Off unless `AGENT_MEMORY_EXTRACTION_TESTS=true`. CI turns it on.
+ */
+export const extractionTests = process.env.AGENT_MEMORY_EXTRACTION_TESTS === 'true';
+
 export const skipReason =
 	missingAgentMemoryEnv.length > 0
 		? `Skipped: set ${missingAgentMemoryEnv.join(', ')} (in the environment or .env) to run tests against Agent Memory`

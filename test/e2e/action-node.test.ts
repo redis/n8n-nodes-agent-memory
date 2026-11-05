@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
-import { agentMemoryConfig, runPrefix, skipReason } from '../support/env';
+import { agentMemoryConfig, extractionTests, runPrefix, skipReason } from '../support/env';
 import {
 	ACTION_NODE_WORKFLOW,
 	callWebhookAndWait,
@@ -367,6 +367,69 @@ describe.skipIf(!agentMemoryConfig)(
 					message: 'The requested Summary View or exact result was not found.',
 					description: 'Summary View Not Found (HTTP 404)',
 				});
+			});
+		});
+
+		describe('memory sources', () => {
+			it('lists no sources for a memory written directly, and shows the server reason for a missing one', async () => {
+				const userId = newUser('sources');
+				const memoryId = `${runPrefix}-action-src-1`;
+				await createMemories([{ memoryId, ownerId: userId, text: 'The user prefers aisle seats' }]);
+
+				const sources = await callAction<Record<string, unknown>>('e2e-action-memory-sources', {
+					memoryId,
+				});
+				expect(sources).toEqual([]);
+
+				const [memory] = await callAction<Record<string, unknown>>('e2e-action-memory-get', {
+					memoryId,
+					includeSources: true,
+				});
+				expect(memory).toMatchObject({ memoryId, sources: [] });
+
+				const missing = await failingAction('e2e-action-memory-sources', {
+					memoryId: `${runPrefix}-action-src-missing`,
+				});
+				expect(missing).toMatchObject({
+					nodeName: 'Action: memory-sources',
+					type: 'NodeApiError',
+					httpCode: '404',
+					description: expect.stringMatching(/Not Found \(HTTP 404\)$/) as string,
+				});
+			});
+
+			// Opt-in (AGENT_MEMORY_EXTRACTION_TESTS=true): the server extracts
+			// memories from session events in the background, which can take minutes.
+			describe.skipIf(!extractionTests)('extracted memories', () => {
+				it('names the session a memory came from, in Get Sources and in Search with Include Sources', async () => {
+					const userId = newUser('src-extracted');
+					const sessionId = `${runPrefix}-action-src-session`;
+					const eventIds = await client.addUserEvents(sessionId, userId, [
+						'My name is Ana Petrova.',
+						'I live in Lisbon, Portugal.',
+						'I am allergic to peanuts.',
+						'I work as a night-shift nurse.',
+					]);
+					const [extracted] = await client.waitForMemories(userId, 180_000);
+
+					const [source] = await callAction<Record<string, unknown>>('e2e-action-memory-sources', {
+						memoryId: extracted.memoryId,
+					});
+					expect(source).toMatchObject({ kind: 'SESSION', sessionId });
+					expect(source.eventIds).not.toHaveLength(0);
+					for (const eventId of source.eventIds as string[]) expect(eventIds).toContain(eventId);
+
+					const found = await callAction<Record<string, unknown>>('e2e-action-memory-search', {
+						query: 'What do we know about the user?',
+						userId,
+						maxResults: 100,
+						includeSources: true,
+					});
+					const match = found.find((memory) => memory.memoryId === extracted.memoryId);
+					expect(match?.sources).toEqual([
+						{ sourceId: source.sourceId, kind: 'SESSION', sessionId, eventIds: source.eventIds },
+					]);
+				}, 240_000);
 			});
 		});
 

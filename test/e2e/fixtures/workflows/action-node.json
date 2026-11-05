@@ -85,7 +85,8 @@
 				"options": {
 					"filterOp": "={{ $json.body.filterOp ?? 'all' }}",
 					"topics": "={{ $json.body.topics ?? '' }}"
-				}
+				},
+				"includeSources": "={{ $json.body.includeSources ?? false }}"
 			},
 			"credentials": {
 				"redisAgentMemoryApi": {
@@ -241,7 +242,8 @@
 				"resource": "longTermMemory",
 				"operation": "get",
 				"memoryId": "={{ $json.body.memoryId }}",
-				"simple": "={{ $json.body.simple ?? true }}"
+				"simple": "={{ $json.body.simple ?? true }}",
+				"includeSources": "={{ $json.body.includeSources ?? false }}"
 			},
 			"credentials": {
 				"redisAgentMemoryApi": {
@@ -685,6 +687,47 @@
 					"name": "Agent Memory (e2e)"
 				}
 			}
+		},
+		{
+			"id": "node-e2e-action-memory-sources",
+			"name": "memory-sources webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [
+				0,
+				3200
+			],
+			"webhookId": "6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0030",
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "e2e-action-memory-sources",
+				"responseMode": "lastNode",
+				"responseData": "allEntries",
+				"options": {}
+			}
+		},
+		{
+			"id": "node-action-memory-sources",
+			"name": "Action: memory-sources",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+			"typeVersion": 1,
+			"position": [
+				260,
+				3200
+			],
+			"parameters": {
+				"resource": "longTermMemory",
+				"operation": "getSources",
+				"memoryId": "={{ $json.body.memoryId }}",
+				"returnAll": true,
+				"simple": "={{ $json.body.simple ?? true }}"
+			},
+			"credentials": {
+				"redisAgentMemoryApi": {
+					"id": "e2eAgentMemory01",
+					"name": "Agent Memory (e2e)"
+				}
+			}
 		}
 	],
 	"connections": {
@@ -858,6 +901,17 @@
 				[
 					{
 						"node": "Action: view-get",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"memory-sources webhook": {
+			"main": [
+				[
+					{
+						"node": "Action: memory-sources",
 						"type": "main",
 						"index": 0
 					}

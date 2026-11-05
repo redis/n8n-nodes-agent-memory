@@ -80,6 +80,23 @@ interface SummaryViewResult extends IDataObject {
 	value?: { text?: string; data?: IDataObject };
 }
 
+/** One evidence entry of a source: document chunks (`evidence`) or session events (`sessionEvidence`). */
+interface SourceEvidence extends IDataObject {
+	capturedAt?: string;
+	eventIds?: string[];
+}
+
+/** Where a memory came from, as `GET /memories/{memoryId}/sources` returns it. */
+interface MemorySourceLink extends IDataObject {
+	sourceId?: string;
+	kind?: string;
+	identity?: { documentId?: string; revision?: string };
+	session?: { sessionId?: string; ownerId?: string };
+	evidence?: SourceEvidence[];
+	sessionEvidence?: SourceEvidence[];
+	evidenceNextCursor?: string;
+}
+
 /** The keys that select one partition of a summary view. */
 interface ScopeFields {
 	ownerId?: string;
@@ -197,10 +214,37 @@ function scopeKeys(scope: ScopeFields): IDataObject {
 }
 
 /**
- * The fields of a memory most workflows read. Create's echo of its request
- * body has the same keys, so Create and Get agree.
+ * A source with its session or document at the top level and the event IDs
+ * of all its session evidence in one list.
  */
-function simplifyMemory(memory: IDataObject): IDataObject {
+function simplifySource(link: MemorySourceLink): IDataObject {
+	const evidence = [...(link.sessionEvidence ?? []), ...(link.evidence ?? [])];
+	const eventIds = (link.sessionEvidence ?? []).flatMap((entry) => entry.eventIds ?? []);
+	return compact({
+		sourceId: link.sourceId,
+		kind: link.kind,
+		sessionId: link.session?.sessionId,
+		documentId: link.identity?.documentId,
+		revision: link.identity?.revision,
+		eventIds: eventIds.length > 0 ? eventIds : undefined,
+		evidenceCount: evidence.length,
+		capturedAt: evidence.find((entry) => entry.capturedAt)?.capturedAt,
+	});
+}
+
+/** The short form of a source that Include Sources keeps on a memory. */
+function sourceReference(link: MemorySourceLink): IDataObject {
+	const { sourceId, kind, sessionId, documentId, eventIds } = simplifySource(link);
+	return compact({ sourceId, kind, sessionId, documentId, eventIds });
+}
+
+/**
+ * The fields of a memory most workflows read. Create's echo of its request
+ * body has the same keys, so Create and Get agree. With `includeSources`, the
+ * sources the record carries are kept in short form.
+ */
+function simplifyMemory(memory: IDataObject, includeSources = false): IDataObject {
+	const sources = memory.sources as MemorySourceLink[] | undefined;
 	return compact({
 		memoryId: memory.memoryId,
 		text: memory.text,
@@ -210,6 +254,7 @@ function simplifyMemory(memory: IDataObject): IDataObject {
 		namespaceId: memory.namespaceId,
 		sessionId: memory.sessionId,
 		createdAt: memory.createdAt,
+		sources: includeSources ? (sources ?? []).map(sourceReference) : undefined,
 	});
 }
 
@@ -497,13 +542,13 @@ class Operations {
 	}
 
 	/**
-	 * The memories found, or, as a tool, one item that says nothing matched.
+	 * The items found (memories or sources), or, as a tool, one item that says nothing matched.
 	 * The Agent turns zero items into the string `""`; one item becomes a JSON
 	 * array the model can read. As an action node no items stay no items,
 	 * n8n's convention ("Always Output Data" exists for the other case).
 	 */
-	private memoriesFound(items: IDataObject[]): IDataObject[] {
-		if (items.length === 0 && this.runsAsTool) return [{ message: 'No memories matched' }];
+	private found(items: IDataObject[], message = 'No memories matched'): IDataObject[] {
+		if (items.length === 0 && this.runsAsTool) return [{ message }];
 		return items;
 	}
 
@@ -521,9 +566,43 @@ class Operations {
 		return this.param<boolean>('simple', true);
 	}
 
-	/** The memories as Simplify wants them. */
+	/** The memories as Simplify and Include Sources want them. */
 	private memories(items: IDataObject[]): IDataObject[] {
-		return this.simple ? items.map(simplifyMemory) : items;
+		if (!this.simple) return items;
+		const includeSources = this.param<boolean>('includeSources', false);
+		return items.map((item) => simplifyMemory(item, includeSources));
+	}
+
+	/**
+	 * The source with all its evidence. The list returns the first page of
+	 * evidence inline; when `evidenceNextCursor` is set, the rest comes from
+	 * the source's evidence endpoint.
+	 */
+	private async withAllEvidence(
+		sourcesPath: string,
+		link: MemorySourceLink,
+	): Promise<MemorySourceLink> {
+		if (!link.evidenceNextCursor || !link.sourceId) return link;
+		const evidence = [...(link.evidence ?? [])];
+		const sessionEvidence = [...(link.sessionEvidence ?? [])];
+		let cursor: string | undefined = link.evidenceNextCursor;
+		while (cursor) {
+			const page: { source?: MemorySourceLink } | undefined = await this.request({
+				method: 'GET',
+				path: `${sourcesPath}/${encodeURIComponent(link.sourceId)}/evidence`,
+				qs: { limit: MAX_PAGE_SIZE, cursor },
+			});
+			evidence.push(...(page?.source?.evidence ?? []));
+			sessionEvidence.push(...(page?.source?.sessionEvidence ?? []));
+			cursor = page?.source?.evidenceNextCursor;
+		}
+		// Every page has been read, so the cursor is dropped.
+		return compact({
+			...link,
+			evidenceNextCursor: undefined,
+			evidence: evidence.length > 0 ? evidence : undefined,
+			sessionEvidence: sessionEvidence.length > 0 ? sessionEvidence : undefined,
+		}) as MemorySourceLink;
 	}
 
 	/** One memory as Simplify wants it. */
@@ -624,7 +703,7 @@ class Operations {
 					path: '/memories/search',
 					body,
 				});
-				return this.memoriesFound(this.memories(this.ownedBy(page?.items ?? [], ownerId)));
+				return this.found(this.memories(this.ownedBy(page?.items ?? [], ownerId)));
 			}
 			case 'getAll': {
 				const filter = memoryFilter(this.param<MemoryFields>('filters', {}));
@@ -644,7 +723,7 @@ class Operations {
 						}),
 					max,
 				);
-				return this.memoriesFound(this.memories(memories));
+				return this.found(this.memories(memories));
 			}
 			case 'create': {
 				const text = this.required('text', 'Text');
@@ -675,6 +754,26 @@ class Operations {
 					path: `/memories/${encodeURIComponent(memoryId)}`,
 				});
 				return this.memory(memory);
+			}
+			case 'getSources': {
+				const memoryId = this.required('memoryId', 'Memory ID');
+				const sourcesPath = `/memories/${encodeURIComponent(memoryId)}/sources`;
+				const { pageSize, max } = this.paging();
+				const links = await collectPages<MemorySourceLink>(
+					async (cursor) =>
+						await this.request<Page<MemorySourceLink>>({
+							method: 'GET',
+							path: sourcesPath,
+							qs: { limit: pageSize, ...(cursor ? { cursor } : {}) },
+						}),
+					max,
+				);
+				const sources: MemorySourceLink[] = [];
+				for (const link of links) sources.push(await this.withAllEvidence(sourcesPath, link));
+				return this.found(
+					this.simple ? sources.map(simplifySource) : sources,
+					'The memory has no sources',
+				);
 			}
 			case 'update': {
 				const memoryId = this.required('memoryId', 'Memory ID');

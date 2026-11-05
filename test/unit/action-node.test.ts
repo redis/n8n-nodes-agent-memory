@@ -559,6 +559,201 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 	});
 });
 
+/** A session source as the API returns it, with its session evidence inline. */
+const sessionSource = {
+	sourceId: 'src-1',
+	kind: 'SESSION',
+	session: { sessionId: 's1', ownerId: 'user-1' },
+	sessionEvidence: [
+		{
+			evidenceId: 'ev-1',
+			capturedAt: '2026-11-05T10:00:00Z',
+			producer: { name: 'iris-memory-extraction' },
+			eventIds: ['e1', 'e2'],
+		},
+	],
+};
+
+/** A document source, which carries chunk evidence instead of event IDs. */
+const documentSource = {
+	sourceId: 'src-2',
+	kind: 'DOCUMENT',
+	identity: { documentId: 'doc-1', revision: 'r2' },
+	evidence: [{ ingestionId: 'in-1', chunkId: 'c1', start: 0, end: 10 }],
+};
+
+describe('RedisAgentMemory: Long-Term Memory sources', () => {
+	const getSources = {
+		resource: 'longTermMemory',
+		operation: 'getSources',
+		memoryId: 'm/1',
+		returnAll: true,
+	};
+
+	it('lists the sources of a memory, one item each, with the event IDs flattened', async () => {
+		const { output, requests } = await run({
+			parameters: getSources,
+			respond: () => ({ items: [sessionSource, documentSource] }),
+		});
+
+		expect(requests).toEqual([
+			expect.objectContaining({
+				method: 'GET',
+				url: `${BASE}/memories/m%2F1/sources`,
+				qs: { limit: 100 },
+			}),
+		]);
+		expect(output).toEqual([
+			{
+				sourceId: 'src-1',
+				kind: 'SESSION',
+				sessionId: 's1',
+				eventIds: ['e1', 'e2'],
+				evidenceCount: 1,
+				capturedAt: '2026-11-05T10:00:00Z',
+			},
+			{
+				sourceId: 'src-2',
+				kind: 'DOCUMENT',
+				documentId: 'doc-1',
+				revision: 'r2',
+				evidenceCount: 1,
+			},
+		]);
+	});
+
+	it('returns the source links as they came with Simplify off', async () => {
+		const { output } = await run({
+			parameters: { ...getSources, simple: false },
+			respond: () => ({ items: [sessionSource] }),
+		});
+		expect(output).toEqual([sessionSource]);
+	});
+
+	it('follows the source list cursor until the limit', async () => {
+		const pages = [
+			{ items: [sessionSource], nextCursor: 'p2' },
+			{ items: [documentSource], nextCursor: 'p3' },
+		];
+		const { output, requests } = await run({
+			parameters: { ...getSources, returnAll: false, limit: 2 },
+			respond: (_options, call) => pages[call],
+		});
+
+		expect(requests.map((r) => r.qs)).toEqual([{ limit: 2 }, { limit: 2, cursor: 'p2' }]);
+		expect(output.map((s) => s.sourceId)).toEqual(['src-1', 'src-2']);
+	});
+
+	it('reads the rest of the evidence when a source has more than one page', async () => {
+		const first = { ...sessionSource, evidenceNextCursor: 'ev-p2' };
+		const responses = [
+			{ items: [first] },
+			{
+				source: {
+					...sessionSource,
+					sessionEvidence: [{ evidenceId: 'ev-2', eventIds: ['e3'] }],
+					evidenceNextCursor: 'ev-p3',
+				},
+			},
+			{ source: { ...sessionSource, sessionEvidence: [{ evidenceId: 'ev-3', eventIds: ['e4'] }] } },
+		];
+		const { output, requests } = await run({
+			parameters: getSources,
+			respond: (_options, call) => responses[call],
+		});
+
+		expect(requests.slice(1)).toEqual([
+			expect.objectContaining({
+				method: 'GET',
+				url: `${BASE}/memories/m%2F1/sources/src-1/evidence`,
+				qs: { limit: 100, cursor: 'ev-p2' },
+			}),
+			expect.objectContaining({ qs: { limit: 100, cursor: 'ev-p3' } }),
+		]);
+		expect(output).toEqual([
+			expect.objectContaining({ eventIds: ['e1', 'e2', 'e3', 'e4'], evidenceCount: 3 }),
+		]);
+
+		const raw = await run({
+			parameters: { ...getSources, simple: false },
+			respond: (_options, call) => responses[call],
+		});
+		expect(raw.output[0]).not.toHaveProperty('evidenceNextCursor');
+		expect(raw.output[0].sessionEvidence).toHaveLength(3);
+	});
+
+	it('outputs no items for a memory without sources, and one message as a tool', async () => {
+		const action = await run({ parameters: getSources, respond: () => ({ items: [] }) });
+		expect(action.output).toEqual([]);
+
+		const tool = await run({
+			parameters: getSources,
+			respond: () => ({ items: [] }),
+			node: TOOL_NODE,
+		});
+		expect(tool.output).toEqual([{ message: 'The memory has no sources' }]);
+	});
+
+	it('refuses Get Sources without a Memory ID before calling the API', async () => {
+		const { output, requests } = await run({
+			parameters: { ...getSources, memoryId: ' ' },
+			continueOnFail: true,
+		});
+		expect(requests).toHaveLength(0);
+		expect(output).toEqual([{ error: "'Memory ID' is empty" }]);
+	});
+
+	const withSources = { ...fullRecord, sources: [sessionSource, documentSource] };
+	const shortSources = [
+		{ sourceId: 'src-1', kind: 'SESSION', sessionId: 's1', eventIds: ['e1', 'e2'] },
+		{ sourceId: 'src-2', kind: 'DOCUMENT', documentId: 'doc-1' },
+	];
+
+	it('keeps the short sources on Search, Get and Get Many with Include Sources on', async () => {
+		const operations = [
+			{ operation: 'search', query: 'q', ownerId: 'user-1' },
+			{ operation: 'get', memoryId: 'm1' },
+			{ operation: 'getAll', returnAll: true, filters: { ownerId: 'user-1' } },
+		];
+		for (const parameters of operations) {
+			const { output, requests } = await run({
+				parameters: { resource: 'longTermMemory', includeSources: true, ...parameters },
+				respond: () => (parameters.operation === 'get' ? withSources : { items: [withSources] }),
+			});
+			expect(requests, parameters.operation).toHaveLength(1);
+			expect(output, parameters.operation).toEqual([{ ...simpleRecord, sources: shortSources }]);
+		}
+	});
+
+	it('leaves sources out by default, gives an empty list when there are none, and passes them raw', async () => {
+		const get = { resource: 'longTermMemory', operation: 'get', memoryId: 'm1' };
+
+		const plain = await run({ parameters: get, respond: () => withSources });
+		expect(plain.output).toEqual([simpleRecord]);
+
+		const none = await run({
+			parameters: { ...get, includeSources: true },
+			respond: () => fullRecord,
+		});
+		expect(none.output).toEqual([{ ...simpleRecord, sources: [] }]);
+
+		const raw = await run({ parameters: { ...get, simple: false }, respond: () => withSources });
+		expect(raw.output).toEqual([withSources]);
+	});
+
+	it('shows Include Sources on Search, Get and Get Many, only with Simplify on', () => {
+		const { properties } = new RedisAgentMemory().description;
+		const includeSources = properties.find((property) => property.name === 'includeSources');
+
+		expect(includeSources).toMatchObject({ type: 'boolean', default: false });
+		expect(includeSources?.displayOptions?.show).toEqual({
+			resource: ['longTermMemory'],
+			operation: ['search', 'get', 'getAll'],
+			simple: [true],
+		});
+	});
+});
+
 /** A session as the API returns it: content parts, a summary object and a namespace binding. */
 const fullSession = {
 	sessionId: 's1',

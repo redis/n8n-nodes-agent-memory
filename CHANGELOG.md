@@ -12,6 +12,8 @@
 - Every create and update sends a fresh `idempotencyKey`, which stores with ingestion hooks require.
 - Session → Add Event and the chat memory post to `/sessions/{sessionId}/events`; the server still creates the session on its first event.
 - New resource **Summary View** on the action node: Get Result (one group's summary, with Wait For Result polling), Refresh, Create, Get, Get Many, Update and Delete. The View field lists the store's views. Summary views must be enabled on the store.
+- New operation Long-Term Memory → **Get Sources**: one item per session or document a memory was extracted from, with the event IDs of the evidence. When a source has more evidence than one page, the node reads the rest.
+- New switch **Include Sources** on Long-Term Memory → Search, Get and Get Many (off by default, shown with Simplify on): keeps each memory's sources in short form, so an agent can say where a fact came from. Raw output already carries them.
 - Memory sub-node option "Summary View ID" (empty by default): when set, each turn also reads that view's summary of the user and gives it to the model, before the session summary.
 
 ## 0.2.0 (2026-11-04)
