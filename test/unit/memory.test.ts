@@ -509,7 +509,11 @@ describe('SummaryAwareWindowedChatMemory with a summary view', () => {
 		},
 	};
 	const ready = {
-		[`GET ${RESULT_PATH}`]: { status: 'READY', value: { text: 'Vegetarian, in Sofia.' } },
+		[`GET ${RESULT_PATH}`]: {
+			status: 'READY',
+			scope: { ownerId: 'user-1' },
+			value: { text: 'Vegetarian, in Sofia.' },
+		},
 	};
 	const options = { windowSize: 10, includeSummary: true, summaryViewId: 'sv-1' };
 
@@ -563,7 +567,11 @@ describe('SummaryAwareWindowedChatMemory with a summary view', () => {
 	it('sends a structured summary as JSON', async () => {
 		const { request } = fakeRequest({
 			...session,
-			[`GET ${RESULT_PATH}`]: { status: 'READY', value: { data: { city: 'Sofia' } } },
+			[`GET ${RESULT_PATH}`]: {
+				status: 'READY',
+				scope: { ownerId: 'user-1' },
+				value: { data: { city: 'Sofia' } },
+			},
 		});
 		const memory = new SummaryAwareWindowedChatMemory(history(request), options);
 
@@ -571,6 +579,17 @@ describe('SummaryAwareWindowedChatMemory with a summary view', () => {
 
 		expect(briefing.id).toBe(SUMMARY_VIEW_MESSAGE_ID);
 		expect(text(briefing)).toContain('{"city":"Sofia"}');
+	});
+
+	it('drops a READY result that the server scopes to another user, or to no user', async () => {
+		for (const scope of [{ ownerId: 'someone-else' }, {}, undefined]) {
+			const { request } = fakeRequest({
+				...session,
+				[`GET ${RESULT_PATH}`]: { status: 'READY', scope, value: { text: 'Not about user-1' } },
+			});
+			const memory = new SummaryAwareWindowedChatMemory(history(request), options);
+			expect((await memory.loadMessages()).map((m) => m.id)).toEqual([SUMMARY_MESSAGE_ID, 'e1']);
+		}
 	});
 
 	it('does not read a view when none is set', async () => {

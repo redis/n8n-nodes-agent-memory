@@ -67,6 +67,8 @@ interface AgentMemorySearchResponse {
 /** A summary view result, as far as the chat memory reads it. */
 interface AgentMemorySummaryViewResult {
 	status?: string;
+	/** The group the result is for; the server echoes the keys the view groups by. */
+	scope?: { ownerId?: string };
 	value?: { text?: string; data?: unknown };
 }
 
@@ -214,7 +216,10 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 	 * The summary a view holds for the configured user, as text, or undefined
 	 * when the server has not computed it yet (`status` other than `READY`),
 	 * it is empty, or the view no longer exists. The view must be grouped by
-	 * user; the server checks the scope. A structured summary is sent as JSON.
+	 * user: the request asks for the user's group, and a result the server
+	 * scopes to anyone else, or to no user (a view with no Group By), is
+	 * dropped, as recall drops another user's memory. A structured summary is
+	 * sent as JSON.
 	 */
 	async getSummaryViewText(viewId: string): Promise<string | undefined> {
 		const result = await this.options.request<AgentMemorySummaryViewResult>({
@@ -224,6 +229,7 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 			allowNotFound: true,
 		});
 		if (result?.status !== 'READY') return undefined;
+		if (result.scope?.ownerId !== this.options.actorId) return undefined;
 		const text = result.value?.text?.trim();
 		if (text) return text;
 		return result.value?.data !== undefined ? JSON.stringify(result.value.data) : undefined;
