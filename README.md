@@ -37,7 +37,7 @@ Memory for n8n AI Agents, backed by [Redis Agent Memory](https://redis.io/docs/l
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
 
-> **Status: 0.1.0, unreleased.** Both nodes are implemented: **Redis Agent Chat Memory** (memory sub-node) and **Redis Agent Memory** (action node, listed as **Redis Agent Memory Tool** in the AI Agent's Tool picker).
+> The package ships two nodes: **Redis Agent Chat Memory** (memory sub-node) and **Redis Agent Memory** (action node, listed as **Redis Agent Memory Tool** in the AI Agent's Tool picker). The badge above shows the version on npm.
 
 [Installation](#installation) · [Nodes](#nodes) · [Credentials](#credentials) · [Compatibility](#compatibility) · [Usage](#usage) · [Development](#development) · [Resources](#resources) · [Contributing](#contributing) · [Security](#security)
 

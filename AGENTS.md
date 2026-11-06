@@ -77,9 +77,9 @@ project _may_ contain example nodes and/or credentials that need to be
 - **Always** address any lint/typecheck errors/warnings, unless there is a
   **very specific reason** to ignore/disable it
 - Make sure to use **proper types whenever possible**
-- The repository keeps no changelog file. `npm run release` generates the
-  GitHub release notes from the commit list, so **write each commit subject
-  as the line a user would read in the release notes**
+- The repository keeps no changelog file. GitHub generates the release notes
+  from the pull request titles since the last release, so **write each pull
+  request title as the line a user would read in the release notes**
 - Read `.agents/workflow.md` for more info
 
 ## Context-specific docs

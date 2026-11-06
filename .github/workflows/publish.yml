@@ -1,65 +1,48 @@
-# Publishes this n8n community node package to npm on every version tag push.
+# Publishes this n8n community node package to npm when a GitHub release is
+# published, then opens a pull request that bumps main to the next minor
+# version.
 #
-# Starting May 1 2026, n8n requires all community nodes to be published via
-# GitHub Actions with npm provenance statements. This workflow satisfies that
-# requirement. Provenance lets anyone cryptographically verify that a package
-# was built by this exact workflow, from this exact repository and commit.
+# From 1 May 2026, n8n requires community nodes to be published from GitHub
+# Actions with npm provenance. Provenance lets anyone verify that a package was
+# built by this workflow, from this repository and commit.
 #
-# ─── PREREQUISITES ─────────────────────────────────────────────────────────────
+# ─── AUTHENTICATION ────────────────────────────────────────────────────────────
 #
-# @n8n/node-cli ≥ 0.23.0 is required. Earlier versions do not support the
-# provenance flag passed by `npm run release` in CI, and the publish step will
-# fail. Check the version installed in this project with:
+# npm Trusted Publishing (OIDC). The repository holds no npm token. The
+# package's settings on npmjs.com name `redis/n8n-nodes-agent-memory` and this
+# file, `publish.yml`, as a trusted publisher, and npm accepts the OIDC token
+# that `id-token: write` lets the job mint. If npm answers an authentication
+# error, check that entry; nothing in this repository can fix it. The runner's
+# npm must be 11.5.1 or later for OIDC; `lts/*` gives a newer one.
 #
-#   npm list @n8n/node-cli
+# ─── HOW A RELEASE RUNS ────────────────────────────────────────────────────────
 #
-# To upgrade, add @n8n/node-cli@latest as a dev dependency using your package manager.
+# `version` in package.json on main is always the version under development,
+# the one the next release will publish. Publishing a GitHub release whose
+# tag is that bare version (0.3.0, not v0.3.0) runs this workflow:
 #
-# ─── ONE-TIME SETUP ────────────────────────────────────────────────────────────
+#   publish  checks that the tag equals package.json, then runs
+#            `npm run release`. In GitHub Actions, `n8n-node release` lints,
+#            builds and runs `npm publish` with provenance. It does not bump,
+#            commit or tag. A release marked pre-release publishes under the
+#            npm dist-tag `next` instead of `latest`.
+#   bump     after a successful publish of a normal release, bumps main to the
+#            next minor version and opens a pull request for it. Merging that
+#            pull request is what makes the next release possible.
 #
-# Option A — OIDC Trusted Publishing (recommended, no long-lived secrets):
-#   1. Log in to npmjs.com and open your package's settings.
-#   2. Under "Publish access" → "Trusted Publishers", click "Add a publisher".
-#   3. Select GitHub Actions and fill in:
-#        Repository owner: <your-github-username-or-org>
-#        Repository name:  <your-repo-name>
-#        Workflow name:    publish.yml
-#        Environment:      (leave blank unless you use GitHub Environments)
-#   4. Leave the NPM_TOKEN secret unset in this repository. GitHub's OIDC
-#      token is used instead — no secret ever touches your repo settings.
+# The pull request is opened with GITHUB_TOKEN unless a RELEASE_PR_TOKEN
+# secret exists. GitHub does not run workflows for pull requests that
+# GITHUB_TOKEN opens, so CI will not run on the bump pull request; with a
+# fine-grained token or GitHub App token in RELEASE_PR_TOKEN (contents and
+# pull requests: write) it does.
 #
-# Option B — npm Automation Token (fallback):
-#   1. On npmjs.com: Access Tokens → Generate New Token → Granular Access Token.
-#      Scope it to this package with "Read and write" publish permission.
-#   2. In GitHub: Settings → Secrets and variables → Actions → New secret.
-#      Name it NPM_TOKEN and paste the token value.
-#
-# Both options work with --provenance. Provenance is signed by GitHub's OIDC
-# infrastructure regardless of how npm authentication is handled.
-#
-# ─── TAG CONVENTION ────────────────────────────────────────────────────────────
-#
-# This workflow triggers on tags matching "*.*.*" (e.g. 0.2.0).
-# If you prefer tags with a "v" prefix (e.g. v0.2.0), change the filter to:
-#   tags: ['v*.*.*']
-#
-# ─── RELEASE PROCESS ───────────────────────────────────────────────────────────
-#
-# Run the following command locally to start an interactive release:
-#
-#   npm run release
-#
-# This will lint, build, prompt for a version bump, generate the release notes,
-# commit, tag, and push — which triggers this workflow to publish to npm.
+# See "Releasing" in CONTRIBUTING.md for the steps a maintainer takes.
 
 name: Publish
 
 on:
-  push:
-    tags:
-      # Matches 0.1.0, 1.2.3, 2.0.0-rc.1, etc.
-      # See "TAG CONVENTION" above if you prefer tags with a "v" prefix.
-      - '*.*.*'
+  release:
+    types: [published]
 
 jobs:
   publish:
@@ -67,13 +50,20 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      # Required to mint an OIDC token for npm provenance attestation.
+      # Mints the OIDC token npm needs for Trusted Publishing and provenance.
       id-token: write
-      # Scoped down from the default (write) for least-privilege publishing.
       contents: read
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check that the release tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$version" ]; then
+            echo "::error::Release tag '$GITHUB_REF_NAME' does not match package.json version '$version' on the tagged commit. Nothing was published. Delete the release and its tag, fix the version on main, and publish again."
+            exit 1
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -84,16 +74,56 @@ jobs:
       - name: Install dependencies
         run: 'npm ci'
 
-      - name: Release
-        # Publishes to npm with a provenance attestation (requires id-token: write above).
-        # Lint and build run automatically as part of the release process.
-        #
-        # Option A (OIDC): leave NPM_TOKEN unset — the token step is skipped and
-        #   npm uses the OIDC exchange instead.
-        # Option B (token): set NPM_TOKEN in repo secrets — it is written to
-        #   .npmrc here before publishing.
-        run: |
-          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm run release
+      - name: Publish
+        run: 'npm run release'
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TAG: ${{ github.event.release.prerelease && 'next' || 'latest' }}
+
+  bump:
+    name: Open the next-version pull request
+    needs: publish
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+
+      - name: Bump to the next minor version
+        id: bump
+        run: |
+          current="$(node -p "require('./package.json').version")"
+          if [ "$current" != "$GITHUB_REF_NAME" ]; then
+            echo "::warning::main is at $current, not at the released $GITHUB_REF_NAME, so there is nothing to bump."
+            echo "next=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          next="$(npm version minor --no-git-tag-version)"
+          echo "next=${next#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Push the branch and open the pull request
+        if: steps.bump.outputs.next != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          NEXT: ${{ steps.bump.outputs.next }}
+          RELEASED: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+        run: |
+          branch="release/bump-$NEXT"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$branch"
+          git add package.json package-lock.json
+          git commit -m "Bump the version to $NEXT"
+          git push --force origin "$branch"
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" ]; then
+            gh pr create --base main --head "$branch" \
+              --title "Bump the version to $NEXT" \
+              --body "$RELEASED is published ($RELEASE_URL). This sets \`version\` in package.json and package-lock.json to $NEXT, the next minor version, so that the next release can be published from the Releases screen with the tag \`$NEXT\`. Opened by the Publish workflow."
+          fi

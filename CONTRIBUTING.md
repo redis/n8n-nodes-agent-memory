@@ -138,8 +138,49 @@ user would read in the release notes.
 
 ## Releasing
 
-Releases are published to npm **only** from GitHub Actions ([`.github/workflows/publish.yml`](.github/workflows/publish.yml)) with npm provenance. n8n requires this for verification from 1 May 2026.
+Releases are published to npm **only** from GitHub Actions
+([`.github/workflows/publish.yml`](.github/workflows/publish.yml)) with npm
+provenance, which n8n requires for verification from 1 May 2026. The
+workflow authenticates with npm Trusted Publishing (OIDC); the repository
+holds no npm token. The package's settings on npmjs.com name this repository
+and `publish.yml` as the trusted publisher.
 
-1. Configure npm Trusted Publishing for `redis/n8n-nodes-agent-memory` → `publish.yml`, or set an `NPM_TOKEN` secret.
-2. Before releasing, read the commit subjects since the last tag: release-it's `auto-changelog` step turns them into the GitHub release notes (its scratch file `.auto-changelog.md` is ignored; see `.auto-changelog`). Reword a subject that would not make sense to a user before you tag.
-3. In a checkout whose `origin` is `redis/n8n-nodes-agent-memory`, with dependencies installed (`npm ci`) and a `GITHUB_TOKEN` in the environment for the GitHub release, run `npm run release`. It lints, builds, bumps the version, commits, tags and pushes; the tag triggers the publish workflow, which publishes with provenance.
+`version` in `package.json` on `main` is always the version under
+development, the one the next release publishes. The workflow keeps it that
+way: after each release it opens a pull request that bumps `main` to the next
+minor version.
+
+1. Check that `version` in `package.json` on `main` is the version you are
+   about to release. If it is not (a patch instead of the prepared minor, or
+   the bump pull request was never merged), open a pull request that sets it
+   and merge it first.
+2. Read the pull request titles since the last tag; GitHub turns them into
+   the release notes. Edit any title that would not make sense to a user.
+3. On GitHub, open **Releases → Draft a new release**. Create a new tag named
+   with the bare version (`0.3.0`, not `v0.3.0`) on `main`, title it
+   `Release <version>`, click **Generate release notes**, and tidy the list.
+   Tick **Set as a pre-release** only to publish under the npm dist-tag
+   `next`; a pre-release opens no bump pull request.
+4. Click **Publish release**. Watch **Actions → Publish**: the `publish` job
+   refuses to run when the tag and `package.json` disagree, then lints,
+   builds and publishes with provenance; the `bump` job opens the
+   next-version pull request.
+5. Check the result and merge the bump pull request:
+
+   ```bash
+   npm view @redis/n8n-nodes-agent-memory@<version> version dist.attestations
+   ```
+
+   The npm package page shows the provenance badge and "Published via GitHub
+   Actions". Workflows do not run on a pull request opened with
+   `GITHUB_TOKEN`, so the bump pull request has no CI checks unless the
+   repository has a `RELEASE_PR_TOKEN` secret (see the workflow header).
+
+If the `publish` job fails before `npm publish`, delete the release and its
+tag, fix `main`, and publish the release again. npm never accepts the same
+version twice, so a failure after a successful publish needs a new version.
+
+Do not run `npm run release` on your machine. Outside GitHub Actions it runs
+release-it, which bumps, commits, tags and pushes a tag; a pushed tag creates
+no GitHub release, so nothing is published, and `main` ends up one version
+ahead of npm.
