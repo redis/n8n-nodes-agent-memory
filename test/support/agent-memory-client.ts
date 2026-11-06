@@ -1,7 +1,9 @@
+import { sleep } from 'n8n-workflow';
 import type { AgentMemorySessionResponse } from '../../nodes/RedisAgentMemoryChatMemory/memory';
 import {
 	AGENT_MEMORY_API_PREFIX,
 	NOT_FOUND_ERROR_TYPE,
+	newIdempotencyKey,
 	type AgentMemoryRequest,
 } from '../../nodes/shared/agentMemoryRequest';
 import type { AgentMemoryTestConfig } from './env';
@@ -87,6 +89,50 @@ export class AgentMemoryTestClient {
 			path: `/sessions/${encodeURIComponent(sessionId)}`,
 			allowNotFound: true,
 		});
+	}
+
+	/**
+	 * Writes one user event per text to the session, tracks the session for
+	 * cleanup, and returns the event IDs in order.
+	 */
+	async addUserEvents(sessionId: string, ownerId: string, texts: string[]): Promise<string[]> {
+		this.track(sessionId, ownerId);
+		const eventIds: string[] = [];
+		for (const text of texts) {
+			const result = await this.request<{ event: { eventId: string } }>({
+				method: 'POST',
+				path: `/sessions/${encodeURIComponent(sessionId)}/events`,
+				body: {
+					idempotencyKey: newIdempotencyKey(),
+					actorId: ownerId,
+					role: 'USER',
+					content: [{ text }],
+					createdAt: new Date().toISOString(),
+				},
+			});
+			eventIds.push(result!.event.eventId);
+		}
+		return eventIds;
+	}
+
+	/**
+	 * The long-term memories of the user, once the server has extracted at
+	 * least one. Asks every five seconds and fails after `timeoutMs`.
+	 */
+	async waitForMemories(ownerId: string, timeoutMs: number): Promise<Array<{ memoryId: string }>> {
+		const deadline = Date.now() + timeoutMs;
+		for (;;) {
+			const page = await this.request<{ items: Array<{ memoryId: string }> }>({
+				method: 'POST',
+				path: '/memories/search',
+				body: { filter: { ownerId: { eq: ownerId } }, limit: 100 },
+			});
+			if ((page?.items ?? []).length > 0) return page!.items;
+			if (Date.now() + 5_000 > deadline) {
+				throw new Error(`No memories were extracted for ${ownerId} within ${timeoutMs / 1000} s`);
+			}
+			await sleep(5_000);
+		}
 	}
 
 	/**

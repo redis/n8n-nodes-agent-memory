@@ -40,6 +40,13 @@ export const longTermMemoryOperations: INodeProperties[] = [
 				action: 'Get many memories',
 			},
 			{
+				name: 'Get Sources',
+				value: 'getSources',
+				description:
+					'List the sessions or documents a long-term memory was extracted from, with the evidence',
+				action: 'Get the sources of a memory',
+			},
+			{
 				name: 'Move',
 				value: 'move',
 				description: 'Move a long-term memory to another namespace',
@@ -69,7 +76,7 @@ const memoryIdField: INodeProperties = {
 	required: true,
 	default: '',
 	description: 'ID of the long-term memory',
-	displayOptions: show(['get', 'update', 'delete', 'move']),
+	displayOptions: show(['get', 'update', 'delete', 'move', 'getSources']),
 };
 
 const topicsField = (description: string): INodeProperties => ({
@@ -80,6 +87,19 @@ const topicsField = (description: string): INodeProperties => ({
 	description,
 	placeholder: 'e.g. food, travel',
 });
+
+/** The Include Sources switch; the raw record carries the full sources already. */
+const includeSourcesField: INodeProperties = {
+	displayName: 'Include Sources',
+	name: 'includeSources',
+	type: 'boolean',
+	default: false,
+	description:
+		'Whether to keep where each memory came from: the sources the record carries, in short form, with their session or document and event IDs. For the full list with its evidence, use Get Sources.',
+	displayOptions: {
+		show: { resource: ['longTermMemory'], operation: ['search', 'get', 'getAll'], simple: [true] },
+	},
+};
 
 export const longTermMemoryFields: INodeProperties[] = [
 	// ----- search -----
@@ -163,14 +183,14 @@ export const longTermMemoryFields: INodeProperties[] = [
 		],
 	},
 
-	// ----- getAll -----
+	// ----- getAll / getSources -----
 	{
 		displayName: 'Return All',
 		name: 'returnAll',
 		type: 'boolean',
 		default: false,
 		description: 'Whether to return all results or only up to a given limit',
-		displayOptions: show(['getAll']),
+		displayOptions: show(['getAll', 'getSources']),
 	},
 	{
 		displayName: 'Limit',
@@ -183,7 +203,11 @@ export const longTermMemoryFields: INodeProperties[] = [
 			maxValue: 100,
 		},
 		displayOptions: {
-			show: { resource: ['longTermMemory'], operation: ['getAll'], returnAll: [false] },
+			show: {
+				resource: ['longTermMemory'],
+				operation: ['getAll', 'getSources'],
+				returnAll: [false],
+			},
 		},
 	},
 	simplifyField(show(['getAll'])),
@@ -285,7 +309,9 @@ export const longTermMemoryFields: INodeProperties[] = [
 
 	// ----- get / update / delete / move -----
 	memoryIdField,
-	simplifyField(show(['get', 'update'])),
+	simplifyField(show(['get', 'update', 'getSources'])),
+	// After Memory ID, so Get shows it below; Search and Get Many show it below their options.
+	includeSourcesField,
 	namespaceLocatorField('Namespace to move the memory to', show(['move'])),
 	{
 		displayName: 'Update Fields',

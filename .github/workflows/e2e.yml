@@ -29,6 +29,11 @@ on:
         description: 'n8n image tag to test against'
         required: false
         default: '2.42.6'
+      slow_tests:
+        description: 'Also run the slow tests that wait for the server (summaries, summary views, extraction)'
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: e2e-${{ github.ref }}-${{ github.event_name }}
@@ -73,19 +78,24 @@ jobs:
         if: env.AGENT_MEMORY_API_KEY != ''
         run: 'docker compose -f test/e2e/docker-compose.yml pull --quiet'
 
+      # The slow tests wait minutes for the server's background work (a session
+      # summary, a computed summary view, memory extraction), and its latency
+      # has no bound we can rely on. They run nightly and on demand, not on
+      # pull requests, so a slow store never blocks a merge.
+      - name: Choose the slow tests
+        run: echo "SLOW_TESTS=${{ (github.event_name == 'schedule' || inputs.slow_tests == true) && 'true' || 'false' }}" >> "$GITHUB_ENV"
+
       - name: Run contract tests
         run: 'npm run test:contract'
         env:
-          # Also wait for a real server summary (about 20 s on the hosted store).
-          AGENT_MEMORY_SUMMARY_TESTS: 'true'
-          # Also wait for a computed summary view result.
-          AGENT_MEMORY_SUMMARY_VIEW_TESTS: 'true'
+          AGENT_MEMORY_SUMMARY_TESTS: ${{ env.SLOW_TESTS }}
+          AGENT_MEMORY_SUMMARY_VIEW_TESTS: ${{ env.SLOW_TESTS }}
+          AGENT_MEMORY_EXTRACTION_TESTS: ${{ env.SLOW_TESTS }}
 
       - name: Run end-to-end tests
         run: 'npm run test:e2e'
         env:
-          # Also wait for a computed summary view result in the chat agent test.
-          AGENT_MEMORY_SUMMARY_VIEW_TESTS: 'true'
+          AGENT_MEMORY_SUMMARY_VIEW_TESTS: ${{ env.SLOW_TESTS }}
 
       - name: Upload container logs
         if: failure()

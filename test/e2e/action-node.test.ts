@@ -370,6 +370,35 @@ describe.skipIf(!agentMemoryConfig)(
 			});
 		});
 
+		describe('memory sources', () => {
+			it('lists no sources for a memory written directly, and shows the server reason for a missing one', async () => {
+				const userId = newUser('sources');
+				const memoryId = `${runPrefix}-action-src-1`;
+				await createMemories([{ memoryId, ownerId: userId, text: 'The user prefers aisle seats' }]);
+
+				const sources = await callAction<Record<string, unknown>>('e2e-action-memory-sources', {
+					memoryId,
+				});
+				expect(sources).toEqual([]);
+
+				const [memory] = await callAction<Record<string, unknown>>('e2e-action-memory-get', {
+					memoryId,
+					includeSources: true,
+				});
+				expect(memory).toMatchObject({ memoryId, sources: [] });
+
+				const missing = await failingAction('e2e-action-memory-sources', {
+					memoryId: `${runPrefix}-action-src-missing`,
+				});
+				expect(missing).toMatchObject({
+					nodeName: 'Action: memory-sources',
+					type: 'NodeApiError',
+					httpCode: '404',
+					description: expect.stringMatching(/Not Found \(HTTP 404\)$/) as string,
+				});
+			});
+		});
+
 		describe('fixes verified inside n8n', () => {
 			// The editor showed n8n's generic status text; the server's reason stayed hidden.
 			it('shows the server reason for a missing memory and for a refused session ID', async () => {

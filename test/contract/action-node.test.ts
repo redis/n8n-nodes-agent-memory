@@ -2,7 +2,13 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { IDataObject, IExecuteFunctions, IHttpRequestOptions, INode } from 'n8n-workflow';
 import { RedisAgentMemory } from '../../nodes/RedisAgentMemory/RedisAgentMemory.node';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
-import { agentMemoryConfig, runPrefix, skipReason, summaryViewTests } from '../support/env';
+import {
+	agentMemoryConfig,
+	extractionTests,
+	runPrefix,
+	skipReason,
+	summaryViewTests,
+} from '../support/env';
 
 const NODE: INode = {
 	id: 'action-node',
@@ -306,6 +312,130 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 			run({ resource: 'session', operation: 'get', sessionId, options: {} }),
 		).rejects.toMatchObject({ httpCode: '404' });
 	});
+	describe('memory sources', () => {
+		it('lists no sources for a memory written directly, and the API not-found for a missing one', async () => {
+			const ownerId = `${runPrefix}-src-owner`;
+			client.track(`${runPrefix}-src-no-session`, ownerId);
+			const [created] = await run({
+				resource: 'longTermMemory',
+				operation: 'create',
+				text: 'The user prefers window seats',
+				ownerId,
+				additionalFields: {},
+			});
+			const memoryId = created.memoryId as string;
+
+			const sources = await run({
+				resource: 'longTermMemory',
+				operation: 'getSources',
+				memoryId,
+				returnAll: true,
+			});
+			expect(sources).toEqual([]);
+
+			const [withSources] = await run({
+				resource: 'longTermMemory',
+				operation: 'get',
+				memoryId,
+				includeSources: true,
+			});
+			expect(withSources).toMatchObject({ memoryId, sources: [] });
+
+			const missingId = `${runPrefix}-src-missing`;
+			await expect(
+				run({
+					resource: 'longTermMemory',
+					operation: 'getSources',
+					memoryId: missingId,
+					returnAll: true,
+				}),
+			).rejects.toMatchObject({ httpCode: '404' });
+			const missing = await client.probe('GET', `/memories/${missingId}/sources`);
+			expect(missing.status).toBe(404);
+			expect(JSON.parse(missing.body)).toMatchObject({
+				type: '/errors/resource-not-found',
+				status: 404,
+				title: expect.stringMatching(/Not Found$/) as string,
+			});
+		});
+
+		// Opt-in (AGENT_MEMORY_EXTRACTION_TESTS=true): extraction from session
+		// events took from 17 seconds to over two minutes on the hosted store.
+		describe.skipIf(!extractionTests)('extracted memories', () => {
+			it('names the session and events a memory was extracted from', async () => {
+				const sessionId = `${runPrefix}-src-session`;
+				const ownerId = `${runPrefix}-src-extracted`;
+				const eventIds = await client.addUserEvents(sessionId, ownerId, [
+					'My name is Ana Petrova.',
+					'I live in Lisbon, Portugal.',
+					'I am allergic to peanuts.',
+					'I work as a night-shift nurse.',
+				]);
+				const [extracted] = await client.waitForMemories(ownerId, 300_000);
+
+				const sources = await run({
+					resource: 'longTermMemory',
+					operation: 'getSources',
+					memoryId: extracted.memoryId,
+					returnAll: true,
+				});
+				expect(sources).toEqual([
+					{
+						sourceId: expect.any(String),
+						kind: 'SESSION',
+						sessionId,
+						eventIds: expect.any(Array),
+						evidenceCount: expect.any(Number),
+						capturedAt: expect.any(String),
+					},
+				]);
+				const [source] = sources;
+				expect(source.eventIds).not.toHaveLength(0);
+				for (const eventId of source.eventIds as string[]) expect(eventIds).toContain(eventId);
+
+				const [raw] = await run({
+					resource: 'longTermMemory',
+					operation: 'getSources',
+					memoryId: extracted.memoryId,
+					returnAll: true,
+					simple: false,
+				});
+				expect(raw).toMatchObject({
+					sourceId: source.sourceId,
+					kind: 'SESSION',
+					session: { sessionId, ownerId },
+				});
+
+				const found = await run({
+					resource: 'longTermMemory',
+					operation: 'search',
+					query: 'What do we know about the user?',
+					ownerId,
+					maxResults: 100,
+					includeSources: true,
+					options: {},
+				});
+				const match = found.find((memory) => memory.memoryId === extracted.memoryId);
+				const shortSource = {
+					sourceId: source.sourceId,
+					kind: 'SESSION',
+					sessionId,
+					eventIds: source.eventIds,
+				};
+				expect(match?.sources).toEqual([shortSource]);
+
+				// The single-record endpoint carries the sources inline as well.
+				const [fetched] = await run({
+					resource: 'longTermMemory',
+					operation: 'get',
+					memoryId: extracted.memoryId,
+					includeSources: true,
+				});
+				expect(fetched.sources).toEqual([shortSource]);
+			}, 360_000);
+		});
+	});
+
 	describe('summary views', () => {
 		const viewIds: string[] = [];
 
@@ -478,7 +608,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					target: 'PARTITION',
 					scope: { ownerId },
 					waitForResult: true,
-					maxWait: 120,
+					maxWait: 300,
 					options: { includeSourceMemoryIds: true },
 				});
 				expect(result).toMatchObject({
@@ -491,7 +621,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				expect(result.sourceMemoryIds).toEqual(
 					expect.arrayContaining([`${runPrefix}-sv-1`, `${runPrefix}-sv-2`]),
 				);
-			}, 150_000);
+			}, 360_000);
 		});
 	});
 });

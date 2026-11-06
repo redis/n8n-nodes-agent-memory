@@ -24,6 +24,9 @@ export default defineConfig({
 				test: {
 					name: 'contract',
 					include: ['test/contract/**/*.test.ts'],
+					// The opt-in tests wait for the server's background work on a
+					// shared store; another file writing at the same time slows it.
+					fileParallelism: false,
 					testTimeout: 30_000,
 					hookTimeout: 60_000,
 				},

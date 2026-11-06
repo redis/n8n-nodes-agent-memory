@@ -38,17 +38,25 @@ export const agentMemoryConfig: AgentMemoryTestConfig | undefined =
 
 /**
  * Opt-in for the contract test that waits for a real server summary. It writes
- * 40 events to a fresh session and polls for up to 90 seconds, so it is off
- * unless `AGENT_MEMORY_SUMMARY_TESTS=true`. CI turns it on.
+ * 40 events to a fresh session and polls for up to 300 seconds, so it is off
+ * unless `AGENT_MEMORY_SUMMARY_TESTS=true`. CI turns it on nightly.
  */
 export const summaryTests = process.env.AGENT_MEMORY_SUMMARY_TESTS === 'true';
 
 /**
  * Opt-in for the contract test that refreshes a summary view and waits for
  * the server to compute it, which takes a model call. Off unless
- * `AGENT_MEMORY_SUMMARY_VIEW_TESTS=true`. CI turns it on.
+ * `AGENT_MEMORY_SUMMARY_VIEW_TESTS=true`. CI turns it on nightly.
  */
 export const summaryViewTests = process.env.AGENT_MEMORY_SUMMARY_VIEW_TESTS === 'true';
+
+/**
+ * Opt-in for the tests that wait for the server to extract long-term memories
+ * from session events, which took from 17 seconds to over three minutes on
+ * the hosted store. Off unless `AGENT_MEMORY_EXTRACTION_TESTS=true`. CI turns
+ * it on nightly.
+ */
+export const extractionTests = process.env.AGENT_MEMORY_EXTRACTION_TESTS === 'true';
 
 export const skipReason =
 	missingAgentMemoryEnv.length > 0

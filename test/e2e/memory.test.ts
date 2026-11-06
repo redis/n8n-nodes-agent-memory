@@ -309,7 +309,7 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 					path: `/summary-views/${viewId}/refresh`,
 					body: { target: 'PARTITION', scope: { ownerId: session.userId } },
 				});
-				const deadline = Date.now() + 100_000;
+				const deadline = Date.now() + 300_000;
 				let status = '';
 				while (Date.now() < deadline) {
 					const result = await client.request<{ status: string }>({
@@ -339,7 +339,7 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 					['USER', 'What do you know about me?'],
 					['ASSISTANT', 'Echo: What do you know about me?'],
 				]);
-			});
+			}, 360_000);
 		});
 	});
 

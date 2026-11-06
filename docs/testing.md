@@ -31,20 +31,35 @@ the node never reads the environment, which n8n verification forbids.
 
 One contract test is opt-in: with `AGENT_MEMORY_SUMMARY_TESTS=true` it writes
 40 events to a fresh session, waits for the server's background summary (on
-the hosted store this took about 20 seconds; the test allows 90) and checks
-that the summary reaches the model and not the chat widget. CI sets the
-variable. The same wire shape is also pinned without the network:
+the hosted store this took about 20 seconds; the test allows 300) and checks
+that the summary reaches the model and not the chat widget. The same wire shape is also pinned without the network:
 `test/unit/fixtures/session-with-summary.json` is a recorded
 `GET …/sessions/{sessionId}` response with a real summary, and a unit
 test maps it through the node's classes.
 
 A second contract test is opt-in for the same reason: with
 `AGENT_MEMORY_SUMMARY_VIEW_TESTS=true` it creates a summary view, seeds two
-long-term memories, refreshes the user's partition and waits up to 120
+long-term memories, refreshes the user's partition and waits up to 300
 seconds for the server to compute the summary. The rest of the summary view
 contract tests (create, get, list, update, delete, a cold result, the `202`
 on delete) run whenever the store is configured. Summary views must be
 enabled on the store; the hosted test store has them.
+
+A third opt-in, `AGENT_MEMORY_EXTRACTION_TESTS=true`, covers memory sources.
+It writes four events with plain facts to a fresh session, waits up to 300
+seconds for the server to extract memories from them (17 seconds to over
+three minutes on the hosted store), then checks that Get Sources names the
+session and its events, and that Search and Get with Include Sources carry
+the same source. Only the contract suite has this test. The e2e suite runs
+the same node code inside n8n through the tests that need no extraction (no
+sources for a memory written directly, Include Sources on Get, the error for
+a missing memory), which always run at both layers.
+
+The three opt-in tests wait for the server's background work, whose latency
+has no bound we can rely on (the extraction test missed 180 seconds once in
+CI). So CI runs them only on the nightly schedule, or when the workflow is
+started by hand with **slow_tests** on; pull requests and pushes run the
+deterministic tests only.
 
 Every run prefixes the session and user IDs it creates with `it-<run>-<random>`,
 and deletes its sessions and the long-term memories of its users at the end.
