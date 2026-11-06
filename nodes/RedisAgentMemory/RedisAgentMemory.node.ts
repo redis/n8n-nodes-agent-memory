@@ -97,8 +97,8 @@ interface MemorySourceLink extends IDataObject {
 	evidenceNextCursor?: string;
 }
 
-/** The keys that select one partition of a summary view. */
-interface ScopeFields {
+/** The keys that select one group of a summary view; sent to the API as its `scope`. */
+interface GroupKeys {
 	ownerId?: string;
 	sessionId?: string;
 	namespaceId?: string;
@@ -126,7 +126,7 @@ interface SummaryViewFields extends MemoryFields {
 
 /** Fields shared by the memory filters, the create fields and the update fields. */
 interface MemoryFields {
-	id?: string;
+	memoryId?: string;
 	text?: string;
 	ownerId?: string;
 	memoryType?: string;
@@ -204,7 +204,7 @@ function positive(value: unknown): number | undefined {
 }
 
 /** The scope keys that are set, as the result and refresh endpoints take them. */
-function scopeKeys(scope: ScopeFields): IDataObject {
+function scopeKeys(scope: GroupKeys): IDataObject {
 	return compact({
 		ownerId: optional(scope.ownerId),
 		sessionId: optional(scope.sessionId),
@@ -278,7 +278,7 @@ function simplifySummaryView(view: SummaryViewResponse): IDataObject {
 		visibility: view.visibility,
 		groupBy: view.groupBy,
 		state: view.state,
-		format: view.output?.format,
+		outputFormat: view.output?.format,
 		refreshMode: view.refreshPolicy?.mode,
 		updatedAt: view.updatedAt,
 	});
@@ -681,20 +681,19 @@ class Operations {
 			case 'search': {
 				const query = this.required('query', 'Query');
 				const ownerId = this.required('ownerId', 'User ID');
-				// The editor caps Max Results at 1 to 100; an expression bypasses the cap.
-				const maxResults = wholeNumber(this.param<unknown>('maxResults', 10));
-				if (maxResults === undefined || maxResults < 1 || maxResults > MAX_PAGE_SIZE) {
+				// The editor caps Limit at 1 to 100; an expression bypasses the cap.
+				const limit = wholeNumber(this.param<unknown>('limit', 50));
+				if (limit === undefined || limit < 1 || limit > MAX_PAGE_SIZE) {
 					this.refuse(
-						"'Max Results' must be a whole number from 1 to 100",
+						"'Limit' must be a whole number from 1 to 100",
 						'The API returns at most 100 memories per search',
 					);
 				}
-				// Workflows saved before 0.1.0 may still carry a `filterOp` option
-				// here. It is left out on purpose; see `ownedBy`.
+				// The node offers no `filterOp`: every filter must match; see `ownedBy`.
 				const options = this.param<MemoryFields & { similarityThreshold?: number }>('options', {});
 				const body: IDataObject = {
 					query,
-					limit: maxResults,
+					limit,
 					filter: memoryFilter({ ...options, ownerId }),
 				};
 				if (options.similarityThreshold) body.minScore = options.similarityThreshold;
@@ -729,7 +728,7 @@ class Operations {
 				const text = this.required('text', 'Text');
 				const ownerId = this.required('ownerId', 'User ID');
 				const additionalFields = this.param<MemoryFields>('additionalFields', {});
-				const memoryId = optional(additionalFields.id) ?? generateMemoryId();
+				const memoryId = optional(additionalFields.memoryId) ?? generateMemoryId();
 				const fields = memoryRecordFields({ ...additionalFields, text, ownerId });
 				// The upsert creates the memory or, when the ID exists, replaces it,
 				// which is what the Memory ID field promises. The bulk endpoint would
@@ -1063,7 +1062,7 @@ class Operations {
 		if (!this.param<boolean>('waitForResult', false)) {
 			return this.summaryResultRecord(await fetchResult());
 		}
-		const maxWait = wholeNumber(this.param<unknown>('maxWait', 60));
+		const maxWait = wholeNumber(this.param<unknown>('maxWaitSeconds', 60));
 		if (maxWait === undefined || maxWait < 1) {
 			this.refuse("'Max Wait' must be 1 or more", 'The number of seconds to wait for the result');
 		}
@@ -1092,7 +1091,7 @@ class Operations {
 		switch (operation) {
 			case 'getResult': {
 				const viewId = this.required('viewId', 'View');
-				const scope = scopeKeys(this.param<ScopeFields>('scope', {}));
+				const scope = scopeKeys(this.param<GroupKeys>('group', {}));
 				return await this.summaryResult(viewId, scope);
 			}
 			case 'refresh': {
@@ -1107,10 +1106,10 @@ class Operations {
 						'A Full refresh recomputes every group and has no single result to wait for. Use Get Result with Wait For Result on to read one group.',
 					);
 				}
-				const scope = target === 'PARTITION' ? scopeKeys(this.param<ScopeFields>('scope', {})) : {};
+				const scope = target === 'PARTITION' ? scopeKeys(this.param<GroupKeys>('group', {})) : {};
 				if (target === 'PARTITION' && Object.keys(scope).length === 0) {
 					this.refuse(
-						"'Scope' is empty",
+						"'Group' is empty",
 						'A Partition refresh needs the keys the view groups by, for example the User ID. Choose Target = Full to recompute every group.',
 					);
 				}

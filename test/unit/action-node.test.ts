@@ -121,7 +121,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				operation: 'search',
 				query: 'What food does the user like?',
 				ownerId: 'user-1',
-				maxResults: 3,
+				limit: 3,
 				options: {
 					namespaceId: 'ns-1',
 					topics: 'food, travel',
@@ -173,7 +173,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 	// Older workflows may still carry a Filter Match option. The API applies one
 	// conjunction to every filter, so "any" would OR the User ID away; the node
 	// never sends it.
-	it('ignores a Filter Match left in an older workflow and a zero threshold', async () => {
+	it('ignores a filterOp option and a zero threshold', async () => {
 		const { requests } = await run({
 			parameters: {
 				resource: 'longTermMemory',
@@ -187,7 +187,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 
 		expect(requests[0].body).toEqual({
 			query: 'q',
-			limit: 10,
+			limit: 50,
 			filter: { ownerId: { eq: 'user-1' } },
 		});
 	});
@@ -219,21 +219,21 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 		).rejects.toThrow("'User ID' is empty");
 	});
 
-	// The editor caps Max Results at 100; an expression bypasses the cap.
-	it.each([500, 0, 2.5, 'ten'])('refuses Max Results of %s before calling the API', async (max) => {
+	// The editor caps Limit at 100; an expression bypasses the cap.
+	it.each([500, 0, 2.5, 'ten'])('refuses a Limit of %s before calling the API', async (max) => {
 		const call = run({
 			parameters: {
 				resource: 'longTermMemory',
 				operation: 'search',
 				query: 'q',
 				ownerId: 'user-1',
-				maxResults: max,
+				limit: max,
 			},
 		});
 
 		await expect(call).rejects.toMatchObject({
 			name: 'NodeOperationError',
-			message: "'Max Results' must be a whole number from 1 to 100",
+			message: "'Limit' must be a whole number from 1 to 100",
 			context: { itemIndex: 0 },
 		});
 	});
@@ -399,7 +399,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				text: 'x',
 				ownerId: 'user-1',
 				simple: false,
-				additionalFields: { id: 'mem 1', namespaceId: 'ns-1' },
+				additionalFields: { memoryId: 'mem 1', namespaceId: 'ns-1' },
 			},
 			respond: () => ({ memoryId: 'mem 1', created: false }),
 		});
@@ -421,7 +421,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 					operation: 'create',
 					text: 'x',
 					ownerId: 'user-1',
-					additionalFields: { id: 'mem-1' },
+					additionalFields: { memoryId: 'mem-1' },
 				},
 				respond: () => ({ memoryId: 'mem-2', created: true }),
 			}),
@@ -553,7 +553,7 @@ describe('RedisAgentMemory: Long-Term Memory', () => {
 				property.displayOptions?.show?.operation?.includes('create') &&
 				property.displayOptions?.show?.resource?.includes('longTermMemory'),
 		);
-		const memoryId = additionalFields?.options?.find((option) => option.name === 'id');
+		const memoryId = additionalFields?.options?.find((option) => option.name === 'memoryId');
 
 		expect(memoryId).toMatchObject({ description: expect.stringContaining('replaces') });
 	});
@@ -1299,7 +1299,7 @@ describe('RedisAgentMemory: Summary View', () => {
 		visibility: 'PRIVATE',
 		groupBy: ['ownerId'],
 		state: 'ACTIVE',
-		format: 'TEXT',
+		outputFormat: 'TEXT',
 		refreshMode: 'MANUAL',
 		updatedAt: '2026-11-05T09:30:00Z',
 	};
@@ -1308,7 +1308,7 @@ describe('RedisAgentMemory: Summary View', () => {
 		resource: 'summaryView',
 		operation: 'getResult',
 		viewId: 'sv-1',
-		scope: { ownerId: 'user-1' },
+		group: { ownerId: 'user-1' },
 	};
 
 	it('offers the view of every operation but Create and Get Many from a list or as an ID', () => {
@@ -1339,7 +1339,7 @@ describe('RedisAgentMemory: Summary View', () => {
 
 	it('offers Wait For Result and Max Wait for Get Result and for a Partition refresh only', () => {
 		const { properties } = new RedisAgentMemory().description;
-		for (const name of ['waitForResult', 'maxWait']) {
+		for (const name of ['waitForResult', 'maxWaitSeconds']) {
 			const fields = properties.filter((property) => property.name === name);
 			expect(fields.map((field) => field.displayOptions?.show)).toEqual([
 				expect.objectContaining({ resource: ['summaryView'], operation: ['getResult'] }),
@@ -1356,7 +1356,7 @@ describe('RedisAgentMemory: Summary View', () => {
 		const { output, requests } = await run({
 			parameters: {
 				...getResult,
-				scope: { ownerId: 'user-1', namespaceId: 'ns-1', sessionId: '', memoryType: ' ' },
+				group: { ownerId: 'user-1', namespaceId: 'ns-1', sessionId: '', memoryType: ' ' },
 				options: { includeSourceMemoryIds: true },
 			},
 			respond: () => readyResult,
@@ -1420,7 +1420,7 @@ describe('RedisAgentMemory: Summary View', () => {
 		const statuses = ['COLD', 'REFRESHING', 'READY'];
 		const askedAt: number[] = [];
 		const pending = run({
-			parameters: { ...getResult, waitForResult: true, maxWait: 60 },
+			parameters: { ...getResult, waitForResult: true, maxWaitSeconds: 60 },
 			respond: (_options, call) => {
 				askedAt.push(Date.now());
 				return statuses[call] === 'READY'
@@ -1454,7 +1454,7 @@ describe('RedisAgentMemory: Summary View', () => {
 	it('fails with the last status when Max Wait passes before the result settles', async () => {
 		vi.useFakeTimers();
 		const pending = run({
-			parameters: { ...getResult, waitForResult: true, maxWait: 5 },
+			parameters: { ...getResult, waitForResult: true, maxWaitSeconds: 5 },
 			respond: () => ({ viewId: 'sv-1', status: 'PENDING' }),
 		});
 		pending.catch(() => undefined);
@@ -1469,7 +1469,7 @@ describe('RedisAgentMemory: Summary View', () => {
 
 	it('refuses a Max Wait below 1 before calling the API', async () => {
 		const requests = await run({
-			parameters: { ...getResult, waitForResult: true, maxWait: 0 },
+			parameters: { ...getResult, waitForResult: true, maxWaitSeconds: 0 },
 		}).then(
 			(r) => r.requests,
 			(error: Error) => {
@@ -1480,14 +1480,14 @@ describe('RedisAgentMemory: Summary View', () => {
 		expect(requests).toEqual([]);
 	});
 
-	it('refuses Wait For Result with Target = Full, and a Partition refresh without a Scope, before calling the API', async () => {
+	it('refuses Wait For Result with Target = Full, and a Partition refresh without a Group, before calling the API', async () => {
 		const refresh = { resource: 'summaryView', operation: 'refresh', viewId: 'sv-1' };
 		for (const [parameters, message] of [
 			[
-				{ ...refresh, target: 'FULL', waitForResult: true, scope: { ownerId: 'user-1' } },
+				{ ...refresh, target: 'FULL', waitForResult: true, group: { ownerId: 'user-1' } },
 				"'Wait For Result' needs Target = Partition",
 			],
-			[{ ...refresh, target: 'PARTITION', scope: { ownerId: ' ' } }, "'Scope' is empty"],
+			[{ ...refresh, target: 'PARTITION', group: { ownerId: ' ' } }, "'Group' is empty"],
 		] as const) {
 			const requests = await run({ parameters }).then(
 				(r) => r.requests,
@@ -1508,7 +1508,7 @@ describe('RedisAgentMemory: Summary View', () => {
 				operation: 'refresh',
 				viewId: 'sv-1',
 				target: 'PARTITION',
-				scope: { ownerId: 'user-1' },
+				group: { ownerId: 'user-1' },
 			},
 			respond: () => accepted,
 		});
@@ -1527,7 +1527,7 @@ describe('RedisAgentMemory: Summary View', () => {
 				operation: 'refresh',
 				viewId: 'sv-1',
 				target: 'FULL',
-				scope: { ownerId: 'user-1' },
+				group: { ownerId: 'user-1' },
 			},
 			respond: () => ({ ...accepted, target: 'FULL' }),
 		});
@@ -1542,7 +1542,7 @@ describe('RedisAgentMemory: Summary View', () => {
 				operation: 'refresh',
 				viewId: 'sv-1',
 				target: 'PARTITION',
-				scope: { ownerId: 'user-1' },
+				group: { ownerId: 'user-1' },
 				waitForResult: true,
 			},
 			respond: (options, call) => {

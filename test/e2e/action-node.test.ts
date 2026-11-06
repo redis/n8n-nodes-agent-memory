@@ -322,7 +322,7 @@ describe.skipIf(!agentMemoryConfig)(
 					visibility: 'PRIVATE',
 					groupBy: ['ownerId'],
 					state: 'ACTIVE',
-					format: 'TEXT',
+					outputFormat: 'TEXT',
 					refreshMode: 'MANUAL',
 					updatedAt: expect.any(String),
 				});
@@ -574,19 +574,19 @@ describe.skipIf(!agentMemoryConfig)(
 				expect((await getNamespace(namespaceId)).state).toBe('ARCHIVED');
 			});
 
-			// The editor caps Max Results at 100; an expression bypassed the cap
+			// The editor caps Limit at 100; an expression bypassed the cap
 			// and the server's 400 named no parameter.
-			it('names Max Results when an expression sets it above 100', async () => {
+			it('names Limit when an expression sets it above 100', async () => {
 				const error = await failingAction('e2e-action-memory-search', {
 					userId: newUser('max-results'),
 					query: 'tea',
-					maxResults: 500,
+					limit: 500,
 				});
 
 				expect(error).toMatchObject({
 					nodeName: 'Action: memory-search',
 					type: 'NodeOperationError',
-					message: "'Max Results' must be a whole number from 1 to 100",
+					message: "'Limit' must be a whole number from 1 to 100",
 				});
 			});
 		});
