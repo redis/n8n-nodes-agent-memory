@@ -371,7 +371,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					'I am allergic to peanuts.',
 					'I work as a night-shift nurse.',
 				]);
-				const [extracted] = await client.waitForMemories(ownerId, 180_000);
+				const [extracted] = await client.waitForMemories(ownerId, 300_000);
 
 				const sources = await run({
 					resource: 'longTermMemory',
@@ -432,7 +432,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					includeSources: true,
 				});
 				expect(fetched.sources).toEqual([shortSource]);
-			}, 240_000);
+			}, 360_000);
 		});
 	});
 
@@ -608,7 +608,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					target: 'PARTITION',
 					scope: { ownerId },
 					waitForResult: true,
-					maxWait: 120,
+					maxWait: 300,
 					options: { includeSourceMemoryIds: true },
 				});
 				expect(result).toMatchObject({
@@ -621,7 +621,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				expect(result.sourceMemoryIds).toEqual(
 					expect.arrayContaining([`${runPrefix}-sv-1`, `${runPrefix}-sv-2`]),
 				);
-			}, 150_000);
+			}, 360_000);
 		});
 	});
 });

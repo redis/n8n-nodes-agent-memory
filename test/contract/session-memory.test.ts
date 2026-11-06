@@ -103,7 +103,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 					path: `/summary-views/${viewId}/refresh`,
 					body: { target: 'PARTITION', scope: { ownerId: actorId } },
 				});
-				const deadline = Date.now() + 120_000;
+				const deadline = Date.now() + 300_000;
 				let status = '';
 				while (Date.now() < deadline) {
 					const result = await client.request<{ status: string }>({
@@ -129,7 +129,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 				expect(part.type === 'text' && part.text).toMatch(
 					/^What is known about the user, summarized from earlier conversations:\n\S/,
 				);
-			}, 150_000);
+			}, 360_000);
 		});
 	});
 
@@ -317,13 +317,13 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 				]);
 			}
 
-			const deadline = Date.now() + 90_000;
+			const deadline = Date.now() + 300_000;
 			let stored = await client.getSession(sessionId);
 			while (!stored?.summary && Date.now() < deadline) {
 				await sleep(5_000);
 				stored = await client.getSession(sessionId);
 			}
-			expect(stored?.summary?.text, 'the server produced no summary within 90 s').toBeTruthy();
+			expect(stored?.summary?.text, 'the server produced no summary within 300 s').toBeTruthy();
 			expect(stored!.events.length).toBeLessThan(40);
 
 			const memory = new SummaryAwareWindowedChatMemory(history, {
@@ -341,7 +341,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 			const widget = await history.getMessages();
 			expect(widget).toHaveLength(stored!.events.length);
 			expect(widget.map((m) => m.id)).not.toContain(SUMMARY_MESSAGE_ID);
-		}, 120_000);
+		}, 360_000);
 	});
 
 	it('recalls long-term memories created directly, scoped to the user', async () => {
