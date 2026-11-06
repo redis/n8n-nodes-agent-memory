@@ -6,6 +6,10 @@ import {
 	newIdempotencyKey,
 	type AgentMemoryRequest,
 } from '../../nodes/shared/agentMemoryRequest';
+import {
+	SETTLED_RESULT_STATUSES,
+	type AgentMemorySummaryViewResult,
+} from '../../nodes/shared/summaryView';
 import type { AgentMemoryTestConfig } from './env';
 
 export class AgentMemoryHttpError extends Error {
@@ -35,6 +39,7 @@ function isResourceNotFound(body: string): boolean {
 export class AgentMemoryTestClient {
 	private readonly createdSessions = new Set<string>();
 	private readonly createdOwners = new Set<string>();
+	private readonly createdViews = new Set<string>();
 
 	constructor(private readonly config: AgentMemoryTestConfig) {}
 
@@ -136,9 +141,62 @@ export class AgentMemoryTestClient {
 	}
 
 	/**
+	 * Creates a summary view grouped by user that computes only on Refresh,
+	 * tracked for `cleanup()`. `overrides` replace fields of the request body.
+	 */
+	async createSummaryView(name: string, overrides: Record<string, unknown> = {}): Promise<string> {
+		const created = await this.request<{ viewId: string }>({
+			method: 'POST',
+			path: '/summary-views',
+			body: {
+				name,
+				source: 'LONG_TERM',
+				groupBy: ['ownerId'],
+				output: { format: 'TEXT', instructions: 'List what is known about the user.' },
+				refreshPolicy: { mode: 'MANUAL' },
+				...overrides,
+			},
+		});
+		this.trackSummaryView(created!.viewId);
+		return created!.viewId;
+	}
+
+	/** Records a view created elsewhere, for example through the node, for `cleanup()`. */
+	trackSummaryView(viewId: string): void {
+		this.createdViews.add(viewId);
+	}
+
+	/**
+	 * One group's result once its status has settled (READY, EMPTY or FAILED).
+	 * Asks every three seconds and fails after `timeoutMs`.
+	 */
+	async waitForSummaryResult(
+		viewId: string,
+		scope: Record<string, string>,
+		timeoutMs: number,
+	): Promise<AgentMemorySummaryViewResult> {
+		const deadline = Date.now() + timeoutMs;
+		for (;;) {
+			const result = await this.request<AgentMemorySummaryViewResult>({
+				method: 'GET',
+				path: `/summary-views/${encodeURIComponent(viewId)}/result`,
+				qs: scope,
+			});
+			if (result && SETTLED_RESULT_STATUSES.has(result.status ?? '')) return result;
+			if (Date.now() + 3_000 > deadline) {
+				throw new Error(
+					`Summary view ${viewId} did not settle within ${timeoutMs / 1000} s (status ${result?.status ?? 'unknown'})`,
+				);
+			}
+			await sleep(3_000);
+		}
+	}
+
+	/**
 	 * Deletes every tracked session, then the long-term memories extracted for
-	 * the tracked owners. Extraction is asynchronous, so a memory extracted
-	 * after this runs can survive; the run prefix keeps it out of other runs.
+	 * the tracked owners, then the tracked summary views. Extraction is
+	 * asynchronous, so a memory extracted after this runs can survive; the run
+	 * prefix keeps it out of other runs.
 	 */
 	async cleanup(): Promise<void> {
 		const failures: unknown[] = [];
@@ -157,8 +215,17 @@ export class AgentMemoryTestClient {
 			);
 		}
 
+		for (const viewId of this.createdViews) {
+			await this.request({
+				method: 'DELETE',
+				path: `/summary-views/${encodeURIComponent(viewId)}`,
+				allowNotFound: true,
+			}).catch((error: unknown) => failures.push(error));
+		}
+
 		this.createdSessions.clear();
 		this.createdOwners.clear();
+		this.createdViews.clear();
 		if (failures.length > 0) {
 			throw new AggregateError(
 				failures,

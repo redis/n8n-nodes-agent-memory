@@ -13,20 +13,30 @@ export const simplifyField = (displayOptions: IDisplayOptions): INodeProperties 
 	displayOptions,
 });
 
+/** What tells one resource locator from another; the rest of the field is shared. */
+export interface LocatorSpec {
+	displayName: string;
+	name: string;
+	/** The node's `listSearch` method that lists the records. */
+	searchListMethod: string;
+	placeholder: string;
+}
+
 /**
- * A namespace chosen from the store's list, or given as an ID or expression.
+ * A record chosen from the store's list, or given as an ID or expression.
  * The ID mode has no format check: the server's ID format may change.
  *
- * Only the top-level Namespace fields use it. The Namespace ID strings inside
- * Filters, Additional Fields and Options stay plain strings: a locator in a
+ * Only top-level fields use a locator. The ID strings inside Filters,
+ * Additional Fields and Options stay plain strings: a locator in a
  * collection crowds the panel.
  */
-export const namespaceLocatorField = (
+export const locatorField = (
+	spec: LocatorSpec,
 	description: string,
 	displayOptions: IDisplayOptions,
 ): INodeProperties => ({
-	displayName: 'Namespace',
-	name: 'namespaceId',
+	displayName: spec.displayName,
+	name: spec.name,
 	type: 'resourceLocator',
 	default: { mode: 'list', value: '' },
 	required: true,
@@ -38,7 +48,7 @@ export const namespaceLocatorField = (
 			name: 'list',
 			type: 'list',
 			typeOptions: {
-				searchListMethod: 'searchNamespaces',
+				searchListMethod: spec.searchListMethod,
 				searchable: true,
 			},
 		},
@@ -46,7 +56,23 @@ export const namespaceLocatorField = (
 			displayName: 'ID',
 			name: 'id',
 			type: 'string',
-			placeholder: 'e.g. 0875d631ea6b4b8b94d8de9d5fd6747c',
+			placeholder: spec.placeholder,
 		},
 	],
 });
+
+/** The Namespace locator of Namespace → Get, Update, Delete and Long-Term Memory → Move. */
+export const namespaceLocatorField = (
+	description: string,
+	displayOptions: IDisplayOptions,
+): INodeProperties =>
+	locatorField(
+		{
+			displayName: 'Namespace',
+			name: 'namespaceId',
+			searchListMethod: 'searchNamespaces',
+			placeholder: 'e.g. 0875d631ea6b4b8b94d8de9d5fd6747c',
+		},
+		description,
+		displayOptions,
+	);

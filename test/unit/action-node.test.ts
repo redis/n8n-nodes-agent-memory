@@ -1453,9 +1453,13 @@ describe('RedisAgentMemory: Summary View', () => {
 
 	it('fails with the last status when Max Wait passes before the result settles', async () => {
 		vi.useFakeTimers();
+		const askedAt: number[] = [];
 		const pending = run({
 			parameters: { ...getResult, waitForResult: true, maxWaitSeconds: 5 },
-			respond: () => ({ viewId: 'sv-1', status: 'PENDING' }),
+			respond: () => {
+				askedAt.push(Date.now());
+				return { viewId: 'sv-1', status: 'PENDING' };
+			},
 		});
 		pending.catch(() => undefined);
 		await vi.runAllTimersAsync();
@@ -1465,6 +1469,8 @@ describe('RedisAgentMemory: Summary View', () => {
 			description:
 				'A manual-refresh view computes a summary only after Refresh. Run Refresh first, or raise Max Wait.',
 		});
+		// Three polls fit in five seconds at one every two seconds.
+		expect(askedAt.map((t) => t - askedAt[0])).toEqual([0, 2_000, 4_000]);
 	});
 
 	it('refuses a Max Wait below 1 before calling the API', async () => {

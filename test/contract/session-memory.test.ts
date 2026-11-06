@@ -33,33 +33,13 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 		return { sessionId, actorId, history };
 	}
 
-	/** Summary views created here, deleted at the end. */
-	const viewIds: string[] = [];
-
 	afterAll(async () => {
 		await client.cleanup();
-		for (const viewId of viewIds) {
-			await client
-				.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
-				.catch(() => undefined);
-		}
 	});
 
-	/** A view grouped by user that computes only on Refresh. */
+	/** A view grouped by user that computes only on Refresh, tracked for cleanup. */
 	async function createView(label: string): Promise<string> {
-		const created = await client.request<{ viewId: string }>({
-			method: 'POST',
-			path: '/summary-views',
-			body: {
-				name: `${runPrefix}-${label}`,
-				source: 'LONG_TERM',
-				groupBy: ['ownerId'],
-				output: { format: 'TEXT', instructions: 'List what is known about the user.' },
-				refreshPolicy: { mode: 'MANUAL' },
-			},
-		});
-		viewIds.push(created!.viewId);
-		return created!.viewId;
+		return await client.createSummaryView(`${runPrefix}-${label}`);
 	}
 
 	describe('summary view option', () => {
@@ -103,18 +83,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory session contract ${skipReason}
 					path: `/summary-views/${viewId}/refresh`,
 					body: { target: 'PARTITION', scope: { ownerId: actorId } },
 				});
-				const deadline = Date.now() + 300_000;
-				let status = '';
-				while (Date.now() < deadline) {
-					const result = await client.request<{ status: string }>({
-						method: 'GET',
-						path: `/summary-views/${viewId}/result`,
-						qs: { ownerId: actorId },
-					});
-					status = result?.status ?? '';
-					if (['READY', 'EMPTY', 'FAILED'].includes(status)) break;
-					await sleep(3_000);
-				}
+				const { status } = await client.waitForSummaryResult(viewId, { ownerId: actorId }, 300_000);
 				expect(status).toBe('READY');
 
 				const memory = new SummaryAwareWindowedChatMemory(history, {

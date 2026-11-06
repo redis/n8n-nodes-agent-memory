@@ -72,8 +72,6 @@ describe.skipIf(!agentMemoryConfig)(
 		const client = new AgentMemoryTestClient(agentMemoryConfig!);
 		/** Namespaces created here, oldest first; deleted newest first, after the memories. */
 		const namespaceIds: string[] = [];
-		/** Summary views created here. */
-		const viewIds: string[] = [];
 
 		/** A user ID inside this run's prefix, registered for cleanup. */
 		function newUser(label: string): string {
@@ -117,11 +115,6 @@ describe.skipIf(!agentMemoryConfig)(
 
 		afterAll(async () => {
 			await client.cleanup();
-			for (const viewId of viewIds) {
-				await client
-					.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
-					.catch(() => undefined);
-			}
 			for (const namespaceId of [...namespaceIds].reverse()) {
 				await client.request({
 					method: 'DELETE',
@@ -296,19 +289,7 @@ describe.skipIf(!agentMemoryConfig)(
 			/** A view grouped by user, computed only on Refresh, created straight on the store. */
 			async function createView(label: string): Promise<{ viewId: string; name: string }> {
 				const name = `${runPrefix}-action-${label}`;
-				const created = await client.request<{ viewId: string }>({
-					method: 'POST',
-					path: '/summary-views',
-					body: {
-						name,
-						source: 'LONG_TERM',
-						groupBy: ['ownerId'],
-						output: { format: 'TEXT' },
-						refreshPolicy: { mode: 'MANUAL' },
-					},
-				});
-				viewIds.push(created!.viewId);
-				return { viewId: created!.viewId, name };
+				return { viewId: await client.createSummaryView(name), name };
 			}
 
 			it("reads a view and a user's result, simplified by default and raw with Simplify off", async () => {

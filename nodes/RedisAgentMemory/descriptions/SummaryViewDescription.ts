@@ -1,5 +1,5 @@
 import type { IDisplayOptions, INodeProperties } from 'n8n-workflow';
-import { simplifyField } from './SharedFields';
+import { locatorField, simplifyField } from './SharedFields';
 
 const show = (operation: string[]) => ({
 	show: { resource: ['summaryView'], operation },
@@ -63,35 +63,17 @@ export const summaryViewOperations: INodeProperties[] = [
 ];
 
 /** A view chosen from the store's list, or given as an ID or expression. */
-const viewLocatorField = (
-	description: string,
-	displayOptions: IDisplayOptions,
-): INodeProperties => ({
-	displayName: 'View',
-	name: 'viewId',
-	type: 'resourceLocator',
-	default: { mode: 'list', value: '' },
-	required: true,
-	description,
-	displayOptions,
-	modes: [
+const viewLocatorField = (description: string, displayOptions: IDisplayOptions): INodeProperties =>
+	locatorField(
 		{
-			displayName: 'From List',
-			name: 'list',
-			type: 'list',
-			typeOptions: {
-				searchListMethod: 'searchSummaryViews',
-				searchable: true,
-			},
-		},
-		{
-			displayName: 'ID',
-			name: 'id',
-			type: 'string',
+			displayName: 'View',
+			name: 'viewId',
+			searchListMethod: 'searchSummaryViews',
 			placeholder: 'e.g. sv_ea8eaecb72b34b91befce96a9014afb6',
 		},
-	],
-});
+		description,
+		displayOptions,
+	);
 
 /** The keys that select one group; which ones apply depends on the view's Group By. */
 const groupField = (description: string, displayOptions: IDisplayOptions): INodeProperties => ({

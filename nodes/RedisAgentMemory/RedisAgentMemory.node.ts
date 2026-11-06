@@ -16,6 +16,10 @@ import {
 	type AgentMemoryRequest,
 } from '../shared/agentMemoryRequest';
 import {
+	SETTLED_RESULT_STATUSES,
+	type AgentMemorySummaryViewResult as SummaryViewResult,
+} from '../shared/summaryView';
+import {
 	longTermMemoryFields,
 	longTermMemoryOperations,
 } from './descriptions/LongTermMemoryDescription';
@@ -34,9 +38,6 @@ const MAX_SEARCH_PAGES = 10;
 
 /** How often Wait For Result asks for a summary view result. */
 const RESULT_POLL_INTERVAL_MS = 2_000;
-
-/** The result statuses that end a Wait For Result poll. */
-const SETTLED_RESULT_STATUSES = new Set(['READY', 'EMPTY', 'FAILED']);
 
 interface Page<T> {
 	items: T[];
@@ -72,12 +73,6 @@ interface UpsertResult {
 interface SummaryViewResponse extends IDataObject {
 	output?: { format?: string };
 	refreshPolicy?: { mode?: string };
-}
-
-/** One partition's result from `GET /summary-views/{viewId}/result`. */
-interface SummaryViewResult extends IDataObject {
-	status?: string;
-	value?: { text?: string; data?: IDataObject };
 }
 
 /** One evidence entry of a source: document chunks (`evidence`) or session events (`sessionEvidence`). */
@@ -378,7 +373,7 @@ export class RedisAgentMemory implements INodeType {
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description:
-			'Search, store and manage long-term memories, sessions and namespaces in Redis Agent Memory',
+			'Search, store and manage long-term memories, sessions, namespaces and summary views in Redis Agent Memory',
 		defaults: {
 			name: 'Redis Agent Memory',
 		},
