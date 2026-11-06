@@ -65,9 +65,9 @@ When asked to build or update a node in this project, follow these steps:
   allow the user to manually test the node in n8n to verify that it does what
   is expected
 - Make sure to use **proper types whenever possible**
-- The repository keeps no changelog file. `npm run release` generates the
-  GitHub release notes from the commit list, so **write each commit subject
-  as the line a user would read in the release notes**
+- The repository keeps no changelog file. GitHub generates the release notes
+  from the pull request titles since the last release, so **write each pull
+  request title as the line a user would read in the release notes**
 
 ## CLI
 This project uses n8n's CLI tool for developing community nodes: `n8n-node`. It
@@ -89,10 +89,8 @@ commands. Short overview of the commands:
   or `n8n-node cloud-support disable` to allow custom ESLint config (disables
   cloud eligibility)
 - `n8n-node release` - publish your community node package to npm.
-  This command handles the complete release process using `release-it`:
-  - Builds the node
-  - Runs linting checks
-  - Generates the release notes from the commits since the last tag
-  - Creates git tags
-  - Creates GitHub releases
-  - Publishes to npm
+  Inside GitHub Actions it lints, builds and runs `npm publish` with
+  provenance; `.github/workflows/publish.yml` runs it when a GitHub release
+  is published. Do not run it locally: there it runs `release-it`, which
+  bumps, commits, tags and pushes, and that is not this project's release
+  process (see "Releasing" in `CONTRIBUTING.md`).
