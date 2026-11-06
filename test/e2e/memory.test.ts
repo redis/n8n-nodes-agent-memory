@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { sleep } from 'n8n-workflow';
+import { SUMMARY_VIEW_HEADING } from '../../nodes/RedisAgentMemoryChatMemory/memory';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
 import { agentMemoryConfig, runPrefix, skipReason, summaryViewTests } from '../support/env';
 import {
@@ -33,7 +33,6 @@ const RECALL_HEADER = 'Long-term memories about the user, from earlier conversat
 const RECALL_CHAT_WEBHOOK_PATH = '6f1d2c9e-0c4b-4f53-9a51-1f7d1b2a0011/chat';
 
 /** The first line of the message that carries a summary view's briefing. */
-const SUMMARY_VIEW_HEADER = 'What is known about the user, summarized from earlier conversations:';
 
 /**
  * The chat URL of fixtures/workflows/chat-agent-summary-view.json, the agent
@@ -109,16 +108,8 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 		await resetStub();
 	});
 
-	/** Summary views created here, deleted at the end. */
-	const viewIds: string[] = [];
-
 	afterAll(async () => {
 		await client.cleanup();
-		for (const viewId of viewIds) {
-			await client
-				.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
-				.catch(() => undefined);
-		}
 	});
 
 	describe('Chat Memory Manager, no model', () => {
@@ -244,19 +235,7 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 	describe('summary view option', () => {
 		/** A view grouped by user that computes only on Refresh, created straight on the store. */
 		async function createView(label: string): Promise<string> {
-			const created = await client.request<{ viewId: string }>({
-				method: 'POST',
-				path: '/summary-views',
-				body: {
-					name: `${runPrefix}-e2e-${label}`,
-					source: 'LONG_TERM',
-					groupBy: ['ownerId'],
-					output: { format: 'TEXT', instructions: 'List what is known about the user.' },
-					refreshPolicy: { mode: 'MANUAL' },
-				},
-			});
-			viewIds.push(created!.viewId);
-			return created!.viewId;
+			return await client.createSummaryView(`${runPrefix}-e2e-${label}`);
 		}
 
 		async function chat(session: Session, summaryViewId: string, chatInput: string) {
@@ -309,18 +288,11 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 					path: `/summary-views/${viewId}/refresh`,
 					body: { target: 'PARTITION', scope: { ownerId: session.userId } },
 				});
-				const deadline = Date.now() + 300_000;
-				let status = '';
-				while (Date.now() < deadline) {
-					const result = await client.request<{ status: string }>({
-						method: 'GET',
-						path: `/summary-views/${viewId}/result`,
-						qs: { ownerId: session.userId },
-					});
-					status = result?.status ?? '';
-					if (['READY', 'EMPTY', 'FAILED'].includes(status)) break;
-					await sleep(3_000);
-				}
+				const { status } = await client.waitForSummaryResult(
+					viewId,
+					{ ownerId: session.userId },
+					300_000,
+				);
 				expect(status).toBe('READY');
 
 				expect(await chat(session, viewId, 'What do you know about me?')).toBe(
@@ -332,8 +304,8 @@ describe.skipIf(!agentMemoryConfig)(`Redis Agent Memory inside n8n ${skipReason}
 				);
 				expect(history).toHaveLength(1);
 				expect(history[0][0]).toBe('user');
-				expect(history[0][1].startsWith(`${SUMMARY_VIEW_HEADER}\n`)).toBe(true);
-				expect(history[0][1].length).toBeGreaterThan(SUMMARY_VIEW_HEADER.length + 1);
+				expect(history[0][1].startsWith(`${SUMMARY_VIEW_HEADING}\n`)).toBe(true);
+				expect(history[0][1].length).toBeGreaterThan(SUMMARY_VIEW_HEADING.length + 1);
 				// The briefing is shown to the model, not written back to the session.
 				expect(await storedTexts(session.sessionId)).toEqual([
 					['USER', 'What do you know about me?'],

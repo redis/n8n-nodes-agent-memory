@@ -125,11 +125,11 @@ export const longTermMemoryFields: INodeProperties[] = [
 		displayOptions: show(['search', 'create']),
 	},
 	{
-		displayName: 'Max Results',
-		name: 'maxResults',
+		displayName: 'Limit',
+		name: 'limit',
 		type: 'number',
-		default: 10,
-		description: 'Max number of memories to return, best matches first',
+		default: 50,
+		description: 'Max number of results to return',
 		typeOptions: {
 			minValue: 1,
 			maxValue: 100,
@@ -276,7 +276,7 @@ export const longTermMemoryFields: INodeProperties[] = [
 		options: [
 			{
 				displayName: 'Memory ID',
-				name: 'id',
+				name: 'memoryId',
 				type: 'string',
 				default: '',
 				description:

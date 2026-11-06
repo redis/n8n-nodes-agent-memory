@@ -65,8 +65,9 @@ When asked to build or update a node in this project, follow these steps:
   allow the user to manually test the node in n8n to verify that it does what
   is expected
 - Make sure to use **proper types whenever possible**
-- If you are updating the npm package version, make sure to **update
-  CHANGELOG.md** in the root of the repository
+- The repository keeps no changelog file. `npm run release` generates the
+  GitHub release notes from the commit list, so **write each commit subject
+  as the line a user would read in the release notes**
 
 ## CLI
 This project uses n8n's CLI tool for developing community nodes: `n8n-node`. It
@@ -91,7 +92,7 @@ commands. Short overview of the commands:
   This command handles the complete release process using `release-it`:
   - Builds the node
   - Runs linting checks
-  - Updates changelog
+  - Generates the release notes from the commits since the last tag
   - Creates git tags
   - Creates GitHub releases
   - Publishes to npm

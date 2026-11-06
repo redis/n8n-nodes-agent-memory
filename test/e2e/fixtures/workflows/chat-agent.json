@@ -110,7 +110,7 @@
 				"operation": "search",
 				"query": "={{ $fromAI('query', 'what to look for', 'string') }}",
 				"ownerId": "e2e-search-tool-user-with-no-memories",
-				"maxResults": 5,
+				"limit": 5,
 				"options": {}
 			},
 			"credentials": {

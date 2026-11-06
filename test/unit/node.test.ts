@@ -335,7 +335,11 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 			parameters: { options: { summaryViewId: ' sv-1 ' } },
 			respond: (options) =>
 				options.url === RESULT_URL
-					? { status: 'READY', value: { text: 'Vegetarian, in Sofia.' } }
+					? {
+							status: 'READY',
+							scope: { ownerId: 'user-1' },
+							value: { text: 'Vegetarian, in Sofia.' },
+						}
 					: { events: [{ eventId: 'e1', role: 'USER', content: [{ text: 'Hi' }] }] },
 		});
 

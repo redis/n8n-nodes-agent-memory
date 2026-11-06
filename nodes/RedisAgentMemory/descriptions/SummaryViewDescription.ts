@@ -1,5 +1,5 @@
 import type { IDisplayOptions, INodeProperties } from 'n8n-workflow';
-import { simplifyField } from './SharedFields';
+import { locatorField, simplifyField } from './SharedFields';
 
 const show = (operation: string[]) => ({
 	show: { resource: ['summaryView'], operation },
@@ -63,42 +63,24 @@ export const summaryViewOperations: INodeProperties[] = [
 ];
 
 /** A view chosen from the store's list, or given as an ID or expression. */
-const viewLocatorField = (
-	description: string,
-	displayOptions: IDisplayOptions,
-): INodeProperties => ({
-	displayName: 'View',
-	name: 'viewId',
-	type: 'resourceLocator',
-	default: { mode: 'list', value: '' },
-	required: true,
-	description,
-	displayOptions,
-	modes: [
+const viewLocatorField = (description: string, displayOptions: IDisplayOptions): INodeProperties =>
+	locatorField(
 		{
-			displayName: 'From List',
-			name: 'list',
-			type: 'list',
-			typeOptions: {
-				searchListMethod: 'searchSummaryViews',
-				searchable: true,
-			},
-		},
-		{
-			displayName: 'ID',
-			name: 'id',
-			type: 'string',
+			displayName: 'View',
+			name: 'viewId',
+			searchListMethod: 'searchSummaryViews',
 			placeholder: 'e.g. sv_ea8eaecb72b34b91befce96a9014afb6',
 		},
-	],
-});
+		description,
+		displayOptions,
+	);
 
-/** The keys that select one partition; which ones apply depends on the view's Group By. */
-const scopeField = (description: string, displayOptions: IDisplayOptions): INodeProperties => ({
-	displayName: 'Scope',
-	name: 'scope',
+/** The keys that select one group; which ones apply depends on the view's Group By. */
+const groupField = (description: string, displayOptions: IDisplayOptions): INodeProperties => ({
+	displayName: 'Group',
+	name: 'group',
 	type: 'collection',
-	placeholder: 'Add Scope Key',
+	placeholder: 'Add Group Key',
 	default: {},
 	description,
 	displayOptions,
@@ -133,6 +115,30 @@ const scopeField = (description: string, displayOptions: IDisplayOptions): INode
 		},
 	],
 });
+
+/** The Wait For Result switch and its Max Wait, shown under `displayOptions`. */
+const waitFields = (displayOptions: IDisplayOptions): INodeProperties[] => [
+	{
+		displayName: 'Wait For Result',
+		name: 'waitForResult',
+		type: 'boolean',
+		default: false,
+		description:
+			'Whether to poll every 2 seconds until the summary is ready, empty or failed, and fail after Max Wait. Off, the node returns the current state, which may still be cold or pending.',
+		displayOptions,
+	},
+	{
+		displayName: 'Max Wait (Seconds)',
+		name: 'maxWaitSeconds',
+		type: 'number',
+		default: 60,
+		description: 'How long to wait for the result before the node fails',
+		typeOptions: { minValue: 1 },
+		displayOptions: {
+			show: { ...displayOptions.show, waitForResult: [true] },
+		},
+	},
+];
 
 const groupByOptions = [
 	{ name: 'Memory Type', value: 'memoryType' },
@@ -191,14 +197,14 @@ const definitionFields: INodeProperties[] = [
 		name: 'memoryType',
 		type: 'string',
 		default: '',
-		description: 'Only summarise memories of this type',
+		description: 'Only summarize memories of this type',
 	},
 	{
 		displayName: 'Namespace ID Filter',
 		name: 'namespaceId',
 		type: 'string',
 		default: '',
-		description: 'Only summarise memories in this namespace',
+		description: 'Only summarize memories in this namespace',
 	},
 	{
 		displayName: 'Reconcile Interval (Seconds)',
@@ -222,14 +228,14 @@ const definitionFields: INodeProperties[] = [
 		name: 'sessionId',
 		type: 'string',
 		default: '',
-		description: 'Only summarise memories extracted from this session',
+		description: 'Only summarize memories extracted from this session',
 	},
 	{
 		displayName: 'Time Window (Seconds)',
 		name: 'timeWindowSeconds',
 		type: 'number',
 		default: 0,
-		description: 'Only summarise memories created in the last so many seconds. Leave at 0 for all.',
+		description: 'Only summarize memories created in the last so many seconds. Leave at 0 for all.',
 		typeOptions: { minValue: 0 },
 	},
 	{
@@ -237,7 +243,7 @@ const definitionFields: INodeProperties[] = [
 		name: 'topics',
 		type: 'string',
 		default: '',
-		description: 'Only summarise memories tagged with any of these topics, comma-separated',
+		description: 'Only summarize memories tagged with any of these topics, comma-separated',
 		placeholder: 'e.g. food, travel',
 	},
 	{
@@ -245,7 +251,7 @@ const definitionFields: INodeProperties[] = [
 		name: 'ownerId',
 		type: 'string',
 		default: '',
-		description: 'Only summarise memories owned by this user',
+		description: 'Only summarize memories owned by this user',
 	},
 	{
 		displayName: 'Visibility',
@@ -264,7 +270,7 @@ const updateOnlyFields: INodeProperties[] = [
 		name: 'clearFilter',
 		type: 'boolean',
 		default: false,
-		description: 'Whether to remove the filter, so the view summarises every memory',
+		description: 'Whether to remove the filter, so the view summarizes every memory',
 	},
 	{
 		displayName: 'Clear Time Window',
@@ -346,40 +352,23 @@ export const summaryViewFields: INodeProperties[] = [
 			{ name: 'Partition', value: 'PARTITION' },
 		],
 		default: 'PARTITION',
-		description: 'Whether to recompute one group, selected by the Scope, or every group',
+		description:
+			'Whether to recompute one group, selected by the Group keys, or every group. Only a Partition refresh can wait for its result.',
 		displayOptions: show(['refresh']),
 	},
-	scopeField(
+	groupField(
 		'The group to read: set the keys the view groups by, for example the User ID of a view grouped by user',
 		show(['getResult']),
 	),
-	scopeField('The group to recompute, for a Partition refresh: set the keys the view groups by', {
+	groupField('The group to recompute, for a Partition refresh: set the keys the view groups by', {
 		show: { resource: ['summaryView'], operation: ['refresh'], target: ['PARTITION'] },
 	}),
-	{
-		displayName: 'Wait For Result',
-		name: 'waitForResult',
-		type: 'boolean',
-		default: false,
-		description:
-			'Whether to poll every 2 seconds until the summary is ready, empty or failed, and fail after Max Wait. Off, the node returns the current state, which may still be cold or pending.',
-		displayOptions: show(['getResult', 'refresh']),
-	},
-	{
-		displayName: 'Max Wait (Seconds)',
-		name: 'maxWait',
-		type: 'number',
-		default: 60,
-		description: 'How long to wait for the result before the node fails',
-		typeOptions: { minValue: 1 },
-		displayOptions: {
-			show: {
-				resource: ['summaryView'],
-				operation: ['getResult', 'refresh'],
-				waitForResult: [true],
-			},
-		},
-	},
+	// A result is one group's summary, so only Get Result and a Partition
+	// refresh can wait for one; a Full refresh has no single result.
+	...waitFields(show(['getResult'])),
+	...waitFields({
+		show: { resource: ['summaryView'], operation: ['refresh'], target: ['PARTITION'] },
+	}),
 	{
 		displayName: 'Options',
 		name: 'options',
@@ -460,7 +449,7 @@ export const summaryViewFields: INodeProperties[] = [
 		type: 'string',
 		default: '',
 		description: 'What the summary should focus on, in plain language',
-		placeholder: "e.g. Summarise the customer's preferences and open issues",
+		placeholder: "e.g. Summarize the customer's preferences and open issues",
 		typeOptions: { rows: 3 },
 		displayOptions: show(['create']),
 	},

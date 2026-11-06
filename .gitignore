@@ -11,5 +11,5 @@ coverage
 # macOS Finder metadata
 .DS_Store
 
-# Written by auto-changelog during `npm run release`; CHANGELOG.md is kept by hand
+# Scratch file of auto-changelog during `npm run release`; the GitHub release notes are the changelog
 .auto-changelog.md

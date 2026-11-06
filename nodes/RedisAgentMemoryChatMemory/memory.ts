@@ -2,6 +2,7 @@ import { BaseChatHistory, BaseChatMemory, type Message } from '@n8n/ai-node-sdk'
 import type { INode } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 import { newIdempotencyKey, type AgentMemoryRequest } from '../shared/agentMemoryRequest';
+import type { AgentMemorySummaryViewResult } from '../shared/summaryView';
 
 export type { AgentMemoryRequest } from '../shared/agentMemoryRequest';
 
@@ -13,6 +14,12 @@ export const RECALL_MESSAGE_ID = 'agent-memory-recall';
 
 /** Message ID used for the synthetic message carrying a summary view's result. */
 export const SUMMARY_VIEW_MESSAGE_ID = 'agent-memory-summary-view';
+
+/** The first line of each synthetic message, so the model knows what follows. */
+export const RECALL_HEADING = 'Long-term memories about the user, from earlier conversations:';
+export const SUMMARY_VIEW_HEADING =
+	'What is known about the user, summarized from earlier conversations:';
+export const SUMMARY_HEADING = 'Summary of the earlier conversation:';
 
 /**
  * Wire types for the Redis Agent Memory REST API (session memory subset).
@@ -62,12 +69,6 @@ export interface AgentMemoryRecord {
 interface AgentMemorySearchResponse {
 	items: AgentMemoryRecord[];
 	nextCursor?: string;
-}
-
-/** A summary view result, as far as the chat memory reads it. */
-interface AgentMemorySummaryViewResult {
-	status?: string;
-	value?: { text?: string; data?: unknown };
 }
 
 export interface AgentMemoryChatHistoryOptions {
@@ -214,7 +215,10 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 	 * The summary a view holds for the configured user, as text, or undefined
 	 * when the server has not computed it yet (`status` other than `READY`),
 	 * it is empty, or the view no longer exists. The view must be grouped by
-	 * user; the server checks the scope. A structured summary is sent as JSON.
+	 * user: the request asks for the user's group, and a result the server
+	 * scopes to anyone else, or to no user (a view with no Group By), is
+	 * dropped, as recall drops another user's memory. A structured summary is
+	 * sent as JSON.
 	 */
 	async getSummaryViewText(viewId: string): Promise<string | undefined> {
 		const result = await this.options.request<AgentMemorySummaryViewResult>({
@@ -224,6 +228,7 @@ export class AgentMemoryChatHistory extends BaseChatHistory {
 			allowNotFound: true,
 		});
 		if (result?.status !== 'READY') return undefined;
+		if (result.scope?.ownerId !== this.options.actorId) return undefined;
 		const text = result.value?.text?.trim();
 		if (text) return text;
 		return result.value?.data !== undefined ? JSON.stringify(result.value.data) : undefined;
@@ -326,39 +331,21 @@ export class SummaryAwareWindowedChatMemory extends BaseChatMemory {
 			(message): Message => (message.role === 'system' ? { ...message, role: 'user' } : message),
 		);
 
+		// In the order the model reads them: recalled facts, the standing
+		// briefing, then the summary of this conversation's earlier turns.
 		const leading: Message[] = [];
 		if (recalled.length > 0) {
-			leading.push({
-				id: RECALL_MESSAGE_ID,
-				role: 'user',
-				content: [
-					{
-						type: 'text',
-						text: `Long-term memories about the user, from earlier conversations:\n${recalled
-							.map((record) => `- ${record.text}`)
-							.join('\n')}`,
-					},
-				],
-			});
+			leading.push(
+				preamble(
+					RECALL_MESSAGE_ID,
+					RECALL_HEADING,
+					recalled.map((record) => `- ${record.text}`).join('\n'),
+				),
+			);
 		}
-		if (briefing) {
-			leading.push({
-				id: SUMMARY_VIEW_MESSAGE_ID,
-				role: 'user',
-				content: [
-					{
-						type: 'text',
-						text: `What is known about the user, summarized from earlier conversations:\n${briefing}`,
-					},
-				],
-			});
-		}
+		if (briefing) leading.push(preamble(SUMMARY_VIEW_MESSAGE_ID, SUMMARY_VIEW_HEADING, briefing));
 		if (includeSummary && summary) {
-			leading.push({
-				id: SUMMARY_MESSAGE_ID,
-				role: 'user',
-				content: [{ type: 'text', text: `Summary of the earlier conversation:\n${summary}` }],
-			});
+			leading.push(preamble(SUMMARY_MESSAGE_ID, SUMMARY_HEADING, summary));
 		}
 
 		return [...leading, ...windowed];
@@ -374,6 +361,16 @@ export class SummaryAwareWindowedChatMemory extends BaseChatMemory {
 	async clear(): Promise<void> {
 		await this.chatHistory.clear();
 	}
+}
+
+/**
+ * A synthetic message in front of the history. It is a user message, not a
+ * system message: the Agent's prompt starts with its own system message, and
+ * some chat models reject a system message anywhere else (see the class
+ * comment on `SummaryAwareWindowedChatMemory`).
+ */
+function preamble(id: string, heading: string, body: string): Message {
+	return { id, role: 'user', content: [{ type: 'text', text: `${heading}\n${body}` }] };
 }
 
 /**

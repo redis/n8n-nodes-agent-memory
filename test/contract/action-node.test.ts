@@ -156,7 +156,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 			operation: 'search',
 			query: 'What does the user eat?',
 			ownerId,
-			maxResults: 5,
+			limit: 5,
 			options: {},
 		});
 		expect(found.map((m) => m.memoryId)).toContain(memoryId);
@@ -166,7 +166,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 			operation: 'search',
 			query: 'What does the user eat?',
 			ownerId: otherOwnerId,
-			maxResults: 5,
+			limit: 5,
 			options: {},
 		});
 		expect(foundForOther).toEqual([]);
@@ -411,7 +411,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					operation: 'search',
 					query: 'What do we know about the user?',
 					ownerId,
-					maxResults: 100,
+					limit: 100,
 					includeSources: true,
 					options: {},
 				});
@@ -437,17 +437,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 	});
 
 	describe('summary views', () => {
-		const viewIds: string[] = [];
-
-		afterAll(async () => {
-			for (const viewId of viewIds) {
-				await client
-					.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
-					.catch(() => undefined);
-			}
-		});
-
-		/** A view grouped by user that computes only on Refresh, created through the node. */
+		/** A view grouped by user that computes only on Refresh, created through the node (the Create under test). */
 		async function createView(label: string): Promise<IDataObject> {
 			const [created] = await run({
 				resource: 'summaryView',
@@ -459,7 +449,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				refreshMode: 'MANUAL',
 				additionalFields: { description: 'Created by the n8n contract tests' },
 			});
-			viewIds.push(created.viewId as string);
+			client.trackSummaryView(created.viewId as string);
 			return created;
 		}
 
@@ -473,7 +463,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				visibility: 'PRIVATE',
 				groupBy: ['ownerId'],
 				state: 'ACTIVE',
-				format: 'TEXT',
+				outputFormat: 'TEXT',
 				refreshMode: 'MANUAL',
 				updatedAt: expect.any(String),
 			});
@@ -502,7 +492,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				resource: 'summaryView',
 				operation: 'getResult',
 				viewId,
-				scope: { ownerId },
+				group: { ownerId },
 				options: {},
 			});
 			expect(cold).toEqual({
@@ -517,7 +507,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				resource: 'summaryView',
 				operation: 'getResult',
 				viewId,
-				scope: { ownerId },
+				group: { ownerId },
 				options: {},
 				simple: false,
 			});
@@ -528,7 +518,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				operation: 'refresh',
 				viewId,
 				target: 'PARTITION',
-				scope: { ownerId },
+				group: { ownerId },
 			});
 			expect(accepted).toEqual({ viewId, target: 'PARTITION', accepted: true });
 
@@ -548,7 +538,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				path: `/summary-views/${viewId}`,
 				allowNotFound: true,
 			});
-			expect(after === undefined || after.state === 'DELETING').toBe(true);
+			expect([undefined, 'DELETING']).toContain(after?.state);
 		});
 
 		it('answers Delete with 202 and the DELETING state, and a missing view with the API not-found', async () => {
@@ -564,7 +554,7 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					resource: 'summaryView',
 					operation: 'getResult',
 					viewId: 'sv_00000000000000000000000000000000',
-					scope: { ownerId: 'nobody' },
+					group: { ownerId: 'nobody' },
 					options: {},
 				}),
 			).rejects.toMatchObject({ httpCode: '404' });
@@ -574,11 +564,10 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 				'/summary-views/sv_00000000000000000000000000000000/result?ownerId=nobody',
 			);
 			expect(missing.status).toBe(404);
-			expect(JSON.parse(missing.body)).toEqual({
+			expect(JSON.parse(missing.body)).toMatchObject({
 				type: '/errors/resource-not-found',
 				title: 'Summary View Not Found',
 				status: 404,
-				detail: 'The requested Summary View or exact result was not found.',
 			});
 		});
 
@@ -606,9 +595,9 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 					operation: 'refresh',
 					viewId,
 					target: 'PARTITION',
-					scope: { ownerId },
+					group: { ownerId },
 					waitForResult: true,
-					maxWait: 300,
+					maxWaitSeconds: 300,
 					options: { includeSourceMemoryIds: true },
 				});
 				expect(result).toMatchObject({

@@ -81,7 +81,7 @@
 				"operation": "search",
 				"query": "={{ $json.body.query }}",
 				"ownerId": "={{ $json.body.userId }}",
-				"maxResults": "={{ $json.body.maxResults ?? 5 }}",
+				"limit": "={{ $json.body.limit ?? 5 }}",
 				"options": {
 					"filterOp": "={{ $json.body.filterOp ?? 'all' }}",
 					"topics": "={{ $json.body.topics ?? '' }}"
@@ -631,7 +631,7 @@
 					"mode": "id",
 					"value": "={{ $json.body.viewId ?? '' }}"
 				},
-				"scope": {
+				"group": {
 					"ownerId": "={{ $json.body.userId ?? '' }}"
 				},
 				"waitForResult": false,

@@ -72,8 +72,6 @@ describe.skipIf(!agentMemoryConfig)(
 		const client = new AgentMemoryTestClient(agentMemoryConfig!);
 		/** Namespaces created here, oldest first; deleted newest first, after the memories. */
 		const namespaceIds: string[] = [];
-		/** Summary views created here. */
-		const viewIds: string[] = [];
 
 		/** A user ID inside this run's prefix, registered for cleanup. */
 		function newUser(label: string): string {
@@ -117,11 +115,6 @@ describe.skipIf(!agentMemoryConfig)(
 
 		afterAll(async () => {
 			await client.cleanup();
-			for (const viewId of viewIds) {
-				await client
-					.request({ method: 'DELETE', path: `/summary-views/${viewId}`, allowNotFound: true })
-					.catch(() => undefined);
-			}
 			for (const namespaceId of [...namespaceIds].reverse()) {
 				await client.request({
 					method: 'DELETE',
@@ -296,19 +289,7 @@ describe.skipIf(!agentMemoryConfig)(
 			/** A view grouped by user, computed only on Refresh, created straight on the store. */
 			async function createView(label: string): Promise<{ viewId: string; name: string }> {
 				const name = `${runPrefix}-action-${label}`;
-				const created = await client.request<{ viewId: string }>({
-					method: 'POST',
-					path: '/summary-views',
-					body: {
-						name,
-						source: 'LONG_TERM',
-						groupBy: ['ownerId'],
-						output: { format: 'TEXT' },
-						refreshPolicy: { mode: 'MANUAL' },
-					},
-				});
-				viewIds.push(created!.viewId);
-				return { viewId: created!.viewId, name };
+				return { viewId: await client.createSummaryView(name), name };
 			}
 
 			it("reads a view and a user's result, simplified by default and raw with Simplify off", async () => {
@@ -322,7 +303,7 @@ describe.skipIf(!agentMemoryConfig)(
 					visibility: 'PRIVATE',
 					groupBy: ['ownerId'],
 					state: 'ACTIVE',
-					format: 'TEXT',
+					outputFormat: 'TEXT',
 					refreshMode: 'MANUAL',
 					updatedAt: expect.any(String),
 				});
@@ -574,19 +555,19 @@ describe.skipIf(!agentMemoryConfig)(
 				expect((await getNamespace(namespaceId)).state).toBe('ARCHIVED');
 			});
 
-			// The editor caps Max Results at 100; an expression bypassed the cap
+			// The editor caps Limit at 100; an expression bypassed the cap
 			// and the server's 400 named no parameter.
-			it('names Max Results when an expression sets it above 100', async () => {
+			it('names Limit when an expression sets it above 100', async () => {
 				const error = await failingAction('e2e-action-memory-search', {
 					userId: newUser('max-results'),
 					query: 'tea',
-					maxResults: 500,
+					limit: 500,
 				});
 
 				expect(error).toMatchObject({
 					nodeName: 'Action: memory-search',
 					type: 'NodeOperationError',
-					message: "'Max Results' must be a whole number from 1 to 100",
+					message: "'Limit' must be a whole number from 1 to 100",
 				});
 			});
 		});
