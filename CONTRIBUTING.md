@@ -122,8 +122,9 @@ npm run e2e:down   # stop it
 - `examples/` holds workflows the README points to. When a node parameter changes, import them into n8n again to check that they still load and run.
 - `AGENTS.md` and `.agents/` guide coding agents and contributors.
 
-Every user-visible change gets a line in `CHANGELOG.md` under the unreleased
-version.
+The repository keeps no changelog file. `npm run release` generates the GitHub
+release notes from the commit list, so write each commit subject as the line a
+user would read in the release notes.
 
 ## Pull requests
 
@@ -140,5 +141,5 @@ version.
 Releases are published to npm **only** from GitHub Actions ([`.github/workflows/publish.yml`](.github/workflows/publish.yml)) with npm provenance. n8n requires this for verification from 1 May 2026.
 
 1. Configure npm Trusted Publishing for `redis/n8n-nodes-agent-memory` → `publish.yml`, or set an `NPM_TOKEN` secret.
-2. Before releasing, move the entries under `## Unreleased` in `CHANGELOG.md` to a heading for the new version. `npm run release` does not edit that file: release-it's `auto-changelog` step writes to the ignored `.auto-changelog.md` (see `.auto-changelog`), and the GitHub release notes it generates are a commit list.
+2. Before releasing, read the commit subjects since the last tag: release-it's `auto-changelog` step turns them into the GitHub release notes (its scratch file `.auto-changelog.md` is ignored; see `.auto-changelog`). Reword a subject that would not make sense to a user before you tag.
 3. In a checkout whose `origin` is `redis/n8n-nodes-agent-memory`, with dependencies installed (`npm ci`) and a `GITHUB_TOKEN` in the environment for the GitHub release, run `npm run release`. It lints, builds, bumps the version, commits, tags and pushes; the tag triggers the publish workflow, which publishes with provenance.

@@ -49,7 +49,7 @@
 #
 #   npm run release
 #
-# This will lint, build, prompt for a version bump, update the changelog,
+# This will lint, build, prompt for a version bump, generate the release notes,
 # commit, tag, and push — which triggers this workflow to publish to npm.
 
 name: Publish

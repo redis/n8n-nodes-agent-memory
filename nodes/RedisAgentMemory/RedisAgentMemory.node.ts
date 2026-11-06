@@ -1098,15 +1098,28 @@ class Operations {
 			case 'refresh': {
 				const viewId = this.required('viewId', 'View');
 				const target = this.param<string>('target', 'PARTITION');
+				const waitForResult = this.param<boolean>('waitForResult', false);
+				// A result is one group's summary. The editor hides Wait For Result
+				// for a Full refresh; an expression or a saved workflow can still set it.
+				if (waitForResult && target !== 'PARTITION') {
+					this.refuse(
+						"'Wait For Result' needs Target = Partition",
+						'A Full refresh recomputes every group and has no single result to wait for. Use Get Result with Wait For Result on to read one group.',
+					);
+				}
 				const scope = target === 'PARTITION' ? scopeKeys(this.param<ScopeFields>('scope', {})) : {};
+				if (target === 'PARTITION' && Object.keys(scope).length === 0) {
+					this.refuse(
+						"'Scope' is empty",
+						'A Partition refresh needs the keys the view groups by, for example the User ID. Choose Target = Full to recompute every group.',
+					);
+				}
 				const accepted = await this.request<IDataObject>({
 					method: 'POST',
 					path: `/summary-views/${encodeURIComponent(viewId)}/refresh`,
-					body: { target, ...(Object.keys(scope).length > 0 ? { scope } : {}) },
+					body: { target, ...(target === 'PARTITION' ? { scope } : {}) },
 				});
-				if (this.param<boolean>('waitForResult', false)) {
-					return await this.summaryResult(viewId, scope);
-				}
+				if (waitForResult) return await this.summaryResult(viewId, scope);
 				return accepted ?? { viewId, target, accepted: true };
 			}
 			case 'get': {

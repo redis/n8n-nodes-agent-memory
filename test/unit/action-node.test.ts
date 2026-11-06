@@ -1337,6 +1337,21 @@ describe('RedisAgentMemory: Summary View', () => {
 		});
 	});
 
+	it('offers Wait For Result and Max Wait for Get Result and for a Partition refresh only', () => {
+		const { properties } = new RedisAgentMemory().description;
+		for (const name of ['waitForResult', 'maxWait']) {
+			const fields = properties.filter((property) => property.name === name);
+			expect(fields.map((field) => field.displayOptions?.show)).toEqual([
+				expect.objectContaining({ resource: ['summaryView'], operation: ['getResult'] }),
+				expect.objectContaining({
+					resource: ['summaryView'],
+					operation: ['refresh'],
+					target: ['PARTITION'],
+				}),
+			]);
+		}
+	});
+
 	it("reads one partition's result with the scope as the query, and simplifies it", async () => {
 		const { output, requests } = await run({
 			parameters: {
@@ -1463,6 +1478,26 @@ describe('RedisAgentMemory: Summary View', () => {
 			},
 		);
 		expect(requests).toEqual([]);
+	});
+
+	it('refuses Wait For Result with Target = Full, and a Partition refresh without a Scope, before calling the API', async () => {
+		const refresh = { resource: 'summaryView', operation: 'refresh', viewId: 'sv-1' };
+		for (const [parameters, message] of [
+			[
+				{ ...refresh, target: 'FULL', waitForResult: true, scope: { ownerId: 'user-1' } },
+				"'Wait For Result' needs Target = Partition",
+			],
+			[{ ...refresh, target: 'PARTITION', scope: { ownerId: ' ' } }, "'Scope' is empty"],
+		] as const) {
+			const requests = await run({ parameters }).then(
+				(r) => r.requests,
+				(error: Error) => {
+					expect(error.message).toBe(message);
+					return [];
+				},
+			);
+			expect(requests).toEqual([]);
+		}
 	});
 
 	it('refreshes a partition, or the whole view, and returns the accepted body', async () => {

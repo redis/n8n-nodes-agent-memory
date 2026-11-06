@@ -134,6 +134,30 @@ const scopeField = (description: string, displayOptions: IDisplayOptions): INode
 	],
 });
 
+/** The Wait For Result switch and its Max Wait, shown under `displayOptions`. */
+const waitFields = (displayOptions: IDisplayOptions): INodeProperties[] => [
+	{
+		displayName: 'Wait For Result',
+		name: 'waitForResult',
+		type: 'boolean',
+		default: false,
+		description:
+			'Whether to poll every 2 seconds until the summary is ready, empty or failed, and fail after Max Wait. Off, the node returns the current state, which may still be cold or pending.',
+		displayOptions,
+	},
+	{
+		displayName: 'Max Wait (Seconds)',
+		name: 'maxWait',
+		type: 'number',
+		default: 60,
+		description: 'How long to wait for the result before the node fails',
+		typeOptions: { minValue: 1 },
+		displayOptions: {
+			show: { ...displayOptions.show, waitForResult: [true] },
+		},
+	},
+];
+
 const groupByOptions = [
 	{ name: 'Memory Type', value: 'memoryType' },
 	{ name: 'Namespace', value: 'namespaceId' },
@@ -346,7 +370,8 @@ export const summaryViewFields: INodeProperties[] = [
 			{ name: 'Partition', value: 'PARTITION' },
 		],
 		default: 'PARTITION',
-		description: 'Whether to recompute one group, selected by the Scope, or every group',
+		description:
+			'Whether to recompute one group, selected by the Scope, or every group. Only a Partition refresh can wait for its result.',
 		displayOptions: show(['refresh']),
 	},
 	scopeField(
@@ -356,30 +381,12 @@ export const summaryViewFields: INodeProperties[] = [
 	scopeField('The group to recompute, for a Partition refresh: set the keys the view groups by', {
 		show: { resource: ['summaryView'], operation: ['refresh'], target: ['PARTITION'] },
 	}),
-	{
-		displayName: 'Wait For Result',
-		name: 'waitForResult',
-		type: 'boolean',
-		default: false,
-		description:
-			'Whether to poll every 2 seconds until the summary is ready, empty or failed, and fail after Max Wait. Off, the node returns the current state, which may still be cold or pending.',
-		displayOptions: show(['getResult', 'refresh']),
-	},
-	{
-		displayName: 'Max Wait (Seconds)',
-		name: 'maxWait',
-		type: 'number',
-		default: 60,
-		description: 'How long to wait for the result before the node fails',
-		typeOptions: { minValue: 1 },
-		displayOptions: {
-			show: {
-				resource: ['summaryView'],
-				operation: ['getResult', 'refresh'],
-				waitForResult: [true],
-			},
-		},
-	},
+	// A result is one group's summary, so only Get Result and a Partition
+	// refresh can wait for one; a Full refresh has no single result.
+	...waitFields(show(['getResult'])),
+	...waitFields({
+		show: { resource: ['summaryView'], operation: ['refresh'], target: ['PARTITION'] },
+	}),
 	{
 		displayName: 'Options',
 		name: 'options',
