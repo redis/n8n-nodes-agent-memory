@@ -1,0 +1,2068 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Memory for n8n AI Agents, backed by Redis Agent Memory">
+      
+      
+        <meta name="author" content="Redis">
+      
+      
+        <link rel="canonical" href="https://redis.github.io/n8n-nodes-agent-memory/latest/examples/">
+      
+      
+        <link rel="prev" href="../guide/provenance/">
+      
+      
+        <link rel="next" href="../reference/operations/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../logo-dark.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Examples - Redis Agent Memory for n8n</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#example-workflows" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Redis Agent Memory for n8n" class="md-header__button md-logo" aria-label="Redis Agent Memory for n8n" data-md-component="logo">
+      
+  <img src="../logo-dark.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Redis Agent Memory for n8n
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Examples
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/redis/n8n-nodes-agent-memory" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    redis/n8n-nodes-agent-memory
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../guide/data-model/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Examples
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/operations/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../development/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Development
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Redis Agent Memory for n8n" class="md-nav__button md-logo" aria-label="Redis Agent Memory for n8n" data-md-component="logo">
+      
+  <img src="../logo-dark.svg" alt="logo">
+
+    </a>
+    Redis Agent Memory for n8n
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/redis/n8n-nodes-agent-memory" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    redis/n8n-nodes-agent-memory
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Users, Sessions and Namespaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/chat-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chat Memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/action-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Action Node and Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/summary-views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Summary Views
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#importing-a-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing a workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-with-long-term-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent with long-term memory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Agent with long-term memory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shared-memory-across-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared memory across agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shared memory across agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hand-off-packet-and-weekly-digest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hand-off packet and weekly digest
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hand-off packet and weekly digest">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trace-correct-and-forget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trace, correct and forget
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Trace, correct and forget">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backfill-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backfill history
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backfill history">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#importing-a-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing a workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-with-long-term-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent with long-term memory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Agent with long-term memory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shared-memory-across-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared memory across agents
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shared memory across agents">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hand-off-packet-and-weekly-digest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hand-off packet and weekly digest
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hand-off packet and weekly digest">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trace-correct-and-forget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trace, correct and forget
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Trace, correct and forget">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backfill-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backfill history
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backfill history">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-gap_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The gap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-it-does_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#try-it_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Try it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make-it-yours_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Make it yours
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="example-workflows">Example Workflows<a class="headerlink" href="#example-workflows" title="Permanent link">&para;</a></h1>
+<p>Six workflows in <a href="https://github.com/redis/n8n-nodes-agent-memory/tree/main/examples"><code>examples/</code></a>, ready to import. Each was built for a gap that n8n users ask about most, as measured in a survey of the n8n forum, GitHub issues and 1,197 memory templates in November 2026: 86% of memory templates use a sliding window only, long-term memory is hand-built from Google Sheets and Postgres with a "Save Memory" tool the model often never calls, and the most-viewed threads ask for session resets, memory that several agents share without leaking between customers, a way to trace and correct what was learned, hand-off notes and digests, and a way to import history.</p>
+<h2 id="importing-a-workflow">Importing a workflow<a class="headerlink" href="#importing-a-workflow" title="Permanent link">&para;</a></h2>
+<ol>
+<li>In n8n, open <strong>Workflows → Create</strong> and choose <strong>Import from URL…</strong> or <strong>Import from File…</strong> from the workflow menu (the <code>⋯</code> at the top right of the editor).</li>
+<li>Use the file's raw URL, <code>https://raw.githubusercontent.com/redis/n8n-nodes-agent-memory/main/examples/&lt;name&gt;.json</code>, or download the file and pick it.</li>
+<li>Open every <strong>Redis</strong> node and select your <strong>Redis Agent Memory API</strong> credential; where an agent is involved, select an <strong>OpenAI</strong> credential on the chat model node.</li>
+<li>Read the sticky note in the workflow. It holds the steps to try.</li>
+</ol>
+<p>The examples use a demo User ID (<code>demo-user</code> in a Set node, a webhook body, or sample rows). In your workflow, take it from the authenticated trigger: a Telegram or Slack sender ID, a JWT claim, the n8n user. Never from the message body.</p>
+<table>
+<thead>
+<tr>
+<th>Workflow</th>
+<th>Gap it closes</th>
+<th>Node features</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#agent-with-long-term-memory">Agent with long-term memory</a></td>
+<td>Facts that outlive the conversation, without a hand-built memory store</td>
+<td>Chat memory with recall, Search and Create as tools</td>
+</tr>
+<tr>
+<td><a href="#session-lifecycle">Session lifecycle</a></td>
+<td><code>/reset</code>, "forget me", expire idle sessions</td>
+<td>Session → Get Many and Delete, Long-Term Memory → Get Many and Delete</td>
+</tr>
+<tr>
+<td><a href="#shared-memory-across-agents">Shared memory across agents</a></td>
+<td>Two agents on one customer, no bleed between customers</td>
+<td>Namespace → Create, the chat memory's Namespace ID option, namespace-scoped tools</td>
+</tr>
+<tr>
+<td><a href="#hand-off-packet-and-weekly-digest">Hand-off packet and weekly digest</a></td>
+<td>Human-readable summaries on demand</td>
+<td>Summary View → Create, Refresh and Get Result</td>
+</tr>
+<tr>
+<td><a href="#trace-correct-and-forget">Trace, correct and forget</a></td>
+<td>Audit, corrections, poisoning triage</td>
+<td>Search with Include Sources, Session → Get, Update, Session → Get Many, delete by Session ID</td>
+</tr>
+<tr>
+<td><a href="#backfill-history">Backfill history</a></td>
+<td>Import a year of conversations and known facts</td>
+<td>Session → Add Event with Created At, Long-Term Memory → Create with topics</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="agent-with-long-term-memory">Agent with long-term memory<a class="headerlink" href="#agent-with-long-term-memory" title="Permanent link">&para;</a></h2>
+<p><strong>File:</strong> <a href="https://github.com/redis/n8n-nodes-agent-memory/blob/main/examples/agent-with-long-term-memory.json"><code>agent-with-long-term-memory.json</code></a></p>
+<h3 id="the-gap">The gap<a class="headerlink" href="#the-gap" title="Permanent link">&para;</a></h3>
+<p>The top long-term-memory template on n8n.io and the most-watched tutorials all build the same thing by hand: extract facts about the user from each conversation and recall them on the next one, with a spreadsheet or a database as the store and 20 to 100 extra nodes. This workflow is that pattern with the store, the extraction and the recall on the server.</p>
+<h3 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    T[Chat Trigger] --&gt; I[Identify the user]
+    I --&gt; A[AI Agent]
+    M[OpenAI Chat Model] -.-&gt; A
+    R[Redis Agent Chat Memory&lt;br/&gt;recall on] -.-&gt; A
+    S[Search memories&lt;br/&gt;tool] -.-&gt; A
+    V[Save memory&lt;br/&gt;tool] -.-&gt; A</code></pre>
+<ul>
+<li><strong>Identify the user</strong> (Set) pins <code>userId</code> to <code>demo-user</code> and passes the chat fields through.</li>
+<li><strong>Redis Agent Chat Memory</strong> stores each turn in the session and, with <strong>Recall Long-Term Memories</strong> on, searches the user's memories with the current message on every turn and gives the hits to the model.</li>
+<li><strong>Search memories</strong> is a <strong>Redis Agent Memory Tool</strong> set to Long-Term Memory → Search with the <strong>User ID</strong> pinned to the Set node's value and the <strong>Query</strong> left to the model. The agent uses it when a question depends on history.</li>
+<li><strong>Save memory</strong> is the same node set to Long-Term Memory → Create, <strong>Text</strong> left to the model. The agent uses it to remember a fact at once, without waiting for extraction.</li>
+<li>The system message tells the model when to use each tool.</li>
+</ul>
+<h3 id="try-it">Try it<a class="headerlink" href="#try-it" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Say: <em>I'm vegetarian and I live in Sofia.</em></li>
+<li>Start a <strong>new</strong> chat, which is a new session, and ask: <em>What should I cook tonight?</em></li>
+</ol>
+<p>The answer uses what you said before: the agent saved it with <em>Save memory</em>, the server also extracted it on its own, and the memory node recalled it for the new turn.</p>
+<h3 id="make-it-yours">Make it yours<a class="headerlink" href="#make-it-yours" title="Permanent link">&para;</a></h3>
+<p>Replace the Set node's constant with an expression over the trigger. Keep <strong>User ID</strong> pinned on both tools. If you only want recall and no tools, delete the two tool nodes; if you want the agent in full control, turn recall off and keep them.</p>
+<hr />
+<h2 id="session-lifecycle">Session lifecycle<a class="headerlink" href="#session-lifecycle" title="Permanent link">&para;</a></h2>
+<p><strong>File:</strong> <a href="https://github.com/redis/n8n-nodes-agent-memory/blob/main/examples/session-lifecycle.json"><code>session-lifecycle.json</code></a></p>
+<h3 id="the-gap_1">The gap<a class="headerlink" href="#the-gap_1" title="Permanent link">&para;</a></h3>
+<p>"How do I clear a session key?", "reset memory", "delete all memories": the three most-viewed memory threads on the n8n forum (6,900, 5,735 and 4,774 views) are about the lifecycle of a conversation, and the built-in memory nodes offer nothing beyond letting the session expire. This workflow gives a chat bot <code>/reset</code> and <code>/forget me</code>, and a nightly job that expires idle sessions.</p>
+<h3 id="what-it-does_1">What it does<a class="headerlink" href="#what-it-does_1" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    T[Chat Trigger] --&gt; I[Identify the user] --&gt; W{Route commands}
+    W --&gt;|/reset| D1[Session → Delete] --&gt; R1[Reply: session cleared]
+    W --&gt;|/forget me| L1[Session → Get Many&lt;br/&gt;by User ID] --&gt; X1{Any?} --&gt;|yes| D2[Session → Delete]
+    X1 --&gt;|no| L2
+    D2 --&gt; L2[Long-Term Memory → Get Many&lt;br/&gt;by User ID] --&gt; X2{Any?} --&gt;|yes| D3[Long-Term Memory → Delete] --&gt; R2[Reply: forgotten]
+    X2 --&gt;|no| R2
+    W --&gt;|anything else| A[AI Agent]
+    N[Every night 03:00] --&gt; L3[Session → Get Many&lt;br/&gt;all] --&gt; F[Idle for 30 days] --&gt; D4[Session → Delete]</code></pre>
+<ul>
+<li><strong>Route commands</strong> (Switch) compares the trimmed, lower-cased message with <code>/reset</code> and <code>/forget me</code>; everything else goes to the agent.</li>
+<li><code>/reset</code>: <strong>Delete this session</strong> removes the current session with its events and summary. Long-term facts stay, and the reply says so.</li>
+<li><code>/forget me</code>: <strong>List my sessions</strong> (Session → Get Many, <strong>User ID</strong> filter, Return All) and <strong>Delete session</strong> for each; then <strong>List my memories</strong> (Long-Term Memory → Get Many, <strong>User ID</strong> filter, Return All, <em>Execute Once</em>) and <strong>Delete memory</strong> for each. The two <strong>Any …?</strong> IF nodes handle a user with nothing to delete: the Get Many nodes have <em>Always Output Data</em> on, so an empty list still produces one (empty) item and the flow reaches the reply.</li>
+<li>The agent branch is the Quick Start wiring with recall on.</li>
+<li><strong>Every night at 03:00</strong> (Schedule Trigger) → <strong>List all sessions</strong> (Session → Get Many without filters, Return All) → <strong>Idle for 30 days</strong> (Filter on <code>updatedAt</code>, falling back to <code>createdAt</code>) → <strong>Delete idle session</strong>.</li>
+</ul>
+<h3 id="try-it_1">Try it<a class="headerlink" href="#try-it_1" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Chat: <em>I'm Ana and I prefer short answers.</em></li>
+<li>Send <code>/reset</code>, then ask <em>What do you know about me?</em> The fact survives the reset.</li>
+<li>Send <code>/forget me</code>, then ask again. Nothing is left.</li>
+</ol>
+<h3 id="make-it-yours_1">Make it yours<a class="headerlink" href="#make-it-yours_1" title="Permanent link">&para;</a></h3>
+<p>Change the 30 days in the Filter node, or filter by <code>ownerId</code> to expire one tenant's sessions. For a Telegram or Slack bot, the Switch works on the message text the same way. If sessions are shared (group chats), turn <code>/forget me</code> into an admin-only command: it deletes by User ID, and in a shared session that is every participant's memories.</p>
+<hr />
+<h2 id="shared-memory-across-agents">Shared memory across agents<a class="headerlink" href="#shared-memory-across-agents" title="Permanent link">&para;</a></h2>
+<p><strong>File:</strong> <a href="https://github.com/redis/n8n-nodes-agent-memory/blob/main/examples/shared-memory-across-agents.json"><code>shared-memory-across-agents.json</code></a></p>
+<h3 id="the-gap_2">The gap<a class="headerlink" href="#the-gap_2" title="Permanent link">&para;</a></h3>
+<p>Multi-channel and multi-agent builds (a sales bot and a support bot on the same customer, a clinic on WhatsApp and Telegram) are among the most-discussed memory problems in the forum: either each agent forgets what the other learned, or one customer's facts leak into another's chat, and the templates that solve it run to 58–84 nodes. Here both agents write to and recall from one <strong>shared namespace</strong> while the <strong>User ID</strong> keeps customers apart inside it. Each agent keeps its own session, so conversation history does not mix.</p>
+<h3 id="what-it-does_2">What it does<a class="headerlink" href="#what-it-does_2" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    S[Set up once] --&gt; C[Namespace → Create&lt;br/&gt;customer-facts, Shared]
+    T[Chat Trigger] --&gt; N[Namespace → Get Many] --&gt; P[Pick customer-facts] --&gt; I[Identify the customer] --&gt; W{Which team?}
+    W --&gt;|sales:| A1[Sales agent]
+    W --&gt;|otherwise| A2[Support agent]
+    M1[Sales memory&lt;br/&gt;namespace set] -.-&gt; A1
+    M2[Support memory&lt;br/&gt;namespace set] -.-&gt; A2
+    L[OpenAI Chat Model] -.-&gt; A1 &amp; A2
+    T1[Search shared memories] -.-&gt; A1 &amp; A2
+    T2[Save shared memory] -.-&gt; A1 &amp; A2</code></pre>
+<ul>
+<li><strong>Set up once</strong> (Manual Trigger) → <strong>Create the shared namespace</strong>: Namespace → Create, name <code>customer-facts</code>, scope <em>Shared</em>. Run it once.</li>
+<li>On each chat message, <strong>Find namespaces</strong> and <strong>Pick customer-facts</strong> look the namespace up by name, and <strong>Identify the customer</strong> (Set) carries <code>userId</code>, <code>namespaceId</code>, <code>sessionId</code> and <code>chatInput</code> forward. The lookup is there so the example runs without pasting IDs; see below.</li>
+<li><strong>Which team?</strong> (Switch) sends messages that start with <code>sales:</code> to the <strong>Sales agent</strong> and everything else to the <strong>Support agent</strong>. Each agent strips the prefix from the prompt.</li>
+<li><strong>Sales memory</strong> and <strong>Support memory</strong> are two chat memory nodes with different <strong>Session ID</strong> prefixes (<code>sales-…</code>, <code>support-…</code>) and the same <strong>Namespace ID</strong> option, so extracted facts from both land in <code>customer-facts</code> and recall searches it.</li>
+<li><strong>Search shared memories</strong> and <strong>Save shared memory</strong> are tools attached to both agents, with the <strong>User ID</strong> pinned and the namespace set under Options (Search) and Additional Fields (Create).</li>
+</ul>
+<h3 id="try-it_2">Try it<a class="headerlink" href="#try-it_2" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Run <strong>Set up once</strong>.</li>
+<li>Chat: <em>sales: We are a team of 12 and our budget is 500 a month.</em></li>
+<li>New chat: <em>support: Which plan fits us?</em> The support agent knows the team size and budget it was never told.</li>
+<li>Change <code>userId</code> in <strong>Identify the customer</strong> to <code>other-customer</code> and ask again: nothing is known.</li>
+</ol>
+<h3 id="make-it-yours_2">Make it yours<a class="headerlink" href="#make-it-yours_2" title="Permanent link">&para;</a></h3>
+<p>In production, store the namespace ID once (a Set node, a workflow variable) and delete the two lookup nodes; one list request per turn is wasteful. Give each channel its own trigger and keep the Switch, or drop the Switch and run one agent per workflow with the same namespace. A <strong>Personal</strong> namespace per customer is the alternative when teams must not share a pool at all; <strong>Long-Term Memory → Move</strong> promotes a memory from one namespace to another.</p>
+<hr />
+<h2 id="hand-off-packet-and-weekly-digest">Hand-off packet and weekly digest<a class="headerlink" href="#hand-off-packet-and-weekly-digest" title="Permanent link">&para;</a></h2>
+<p><strong>File:</strong> <a href="https://github.com/redis/n8n-nodes-agent-memory/blob/main/examples/handoff-packet-and-weekly-digest.json"><code>handoff-packet-and-weekly-digest.json</code></a></p>
+<h3 id="the-gap_3">The gap<a class="headerlink" href="#the-gap_3" title="Permanent link">&para;</a></h3>
+<p>The best bot-to-human hand-off template on n8n.io (17,900 views, 39 nodes) has the human type the summary of what the bot learned, and "what did the agent learn this week" digests are built from dozens of nodes. A <a href="../guide/summary-views/">summary view</a> is a standing summary the server keeps per user, so both become a few nodes.</p>
+<h3 id="what-it-does_3">What it does<a class="headerlink" href="#what-it-does_3" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    S[Set up once] --&gt; C[Summary View → Create&lt;br/&gt;customer-briefing, by User, Manual]
+    W[POST /webhook/handoff] --&gt; F1[Find views] --&gt; P1[Pick customer-briefing] --&gt; R1[Refresh&lt;br/&gt;Partition, Wait For Result] --&gt; H[Hand-off packet] --&gt; O[Respond]
+    K[Every Monday 08:00] --&gt; F2[Find views] --&gt; P2[Pick customer-briefing] --&gt; R2[Refresh&lt;br/&gt;Full] --&gt; L[Session → Get Many] --&gt; U[Known users only] --&gt; D[One item per user] --&gt; G[Get Result&lt;br/&gt;Wait For Result] --&gt; E[Digest line] --&gt; A[Collect all lines] --&gt; Z[Weekly digest]</code></pre>
+<ul>
+<li><strong>Set up once</strong> → <strong>Create the briefing view</strong>: Summary View → Create, name <code>customer-briefing</code>, <strong>Group By</strong> <em>User</em>, <strong>Output Format</strong> <em>Text</em>, <strong>Refresh Mode</strong> <em>Manual</em>, with instructions for a briefing under 150 words for a human agent taking over.</li>
+<li><strong>Hand-off packet.</strong> <code>POST /webhook/handoff</code> with <code>{ "userId": "demo-user" }</code>. <strong>Find views</strong> and <strong>Pick customer-briefing</strong> look the view up by name; <strong>Refresh this customer's briefing</strong> runs a <em>Partition</em> refresh for the <strong>Group</strong> <code>ownerId</code> from the request with <strong>Wait For Result</strong> on (up to 90 seconds); <strong>Hand-off packet</strong> (Set) shapes <code>userId</code>, <code>briefing</code>, <code>status</code>, <code>memoriesSummarized</code>, <code>computedAt</code>; <strong>Respond with the packet</strong> returns it, ready for a Zendesk or HubSpot note.</li>
+<li><strong>Weekly digest.</strong> <strong>Every Monday at 08:00</strong> → look the view up → <strong>Refresh every briefing</strong> (<em>Full</em>) → <strong>List sessions</strong> (Session → Get Many, Return All) → <strong>Known users only</strong> (Filter: has <code>ownerId</code>) → <strong>One item per user</strong> (Remove Duplicates on <code>ownerId</code>) → <strong>Read the user's briefing</strong> (Get Result with <strong>Wait For Result</strong>, up to 120 seconds, for each user) → <strong>Digest line</strong> (Set: user and text, or "(nothing learned yet)" for an <code>EMPTY</code> result) → <strong>Collect all lines</strong> (Aggregate) → <strong>Weekly digest</strong> (Set: one Markdown document). Connect Slack or Gmail after it.</li>
+</ul>
+<h3 id="try-it_3">Try it<a class="headerlink" href="#try-it_3" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Run <strong>Set up once</strong>.</li>
+<li>Chat with any agent example in this folder as <code>demo-user</code>.</li>
+<li>
+<p>Open <strong>Respond with the packet</strong> and choose <strong>Execute step</strong>. <strong>Escalation request</strong> carries a pinned sample request, so the hand-off branch runs in the editor without a client:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"userId"</span><span class="p">:</span><span class="w"> </span><span class="s2">"demo-user"</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">"ticketId"</span><span class="p">:</span><span class="w"> </span><span class="s2">"HD-48213"</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">"channel"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chat"</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">"reason"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Customer asked for a human agent"</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">}</span>
+</code></pre></div>
+<p>Only <code>userId</code> is read; the other fields show what a help-desk escalation carries. Pinned data applies to editor runs only. To call the live webhook instead, activate the workflow and send the same body:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>https://your-n8n/webhook/handoff<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"userId": "demo-user"}'</span>
+</code></pre></div>
+</li>
+</ol>
+<h3 id="make-it-yours_3">Make it yours<a class="headerlink" href="#make-it-yours_3" title="Permanent link">&para;</a></h3>
+<p>Summary views must be enabled on the store. In production the <strong>View</strong> field offers the store's views in a list, so pick the view there and drop the lookup nodes. Switch the view to <strong>Continuous</strong> refresh if the briefing must be fresh without a Refresh step; it costs a model call per change. For a structured hand-off (fields for a CRM), create a second view with <strong>Output Format</strong> <em>Structured</em> and a schema. To give the agent itself the briefing on every turn, set the chat memory node's <strong>Summary View ID</strong> option to the view's ID.</p>
+<hr />
+<h2 id="trace-correct-and-forget">Trace, correct and forget<a class="headerlink" href="#trace-correct-and-forget" title="Permanent link">&para;</a></h2>
+<p><strong>File:</strong> <a href="https://github.com/redis/n8n-nodes-agent-memory/blob/main/examples/trace-and-correct-a-memory.json"><code>trace-and-correct-a-memory.json</code></a></p>
+<h3 id="the-gap_4">The gap<a class="headerlink" href="#the-gap_4" title="Permanent link">&para;</a></h3>
+<p>Corrections ("I moved from Berlin to Madrid"), audit ("which conversation produced this?") and memory poisoning (a feature request on the n8n forum, and the core failure mode named by two 2026 benchmarks) all need to know where a memory came from. No other n8n memory node shows it; Mem0 carries three open requests for exactly this. Every memory here carries its <a href="../guide/provenance/">sources</a>: the session and the exact events it was extracted from.</p>
+<h3 id="what-it-does_4">What it does<a class="headerlink" href="#what-it-does_4" title="Permanent link">&para;</a></h3>
+<p>Three HTTP endpoints an operator or an admin workflow can call.</p>
+<pre class="mermaid"><code>flowchart LR
+    W1[POST /webhook/memory/trace] --&gt; S[Search&lt;br/&gt;Include Sources] --&gt; H{Session source?} --&gt;|yes| R[Session → Get&lt;br/&gt;Include Summarized Events] --&gt; E[Evidence report] --&gt; M[Merge] --&gt; O1[Respond]
+    H --&gt;|no| N[No sources] --&gt; M
+    W2[POST /webhook/memory/correct] --&gt; S2[Search&lt;br/&gt;limit 1] --&gt; F2{Found?} --&gt;|yes| U[Long-Term Memory → Update] --&gt; O2[Respond]
+    F2 --&gt;|no| O5[Respond: nothing matched]
+    W3[POST /webhook/memory/forget-thread] --&gt; L1[Session → Get Many&lt;br/&gt;by User ID] --&gt; P[Pick the thread] --&gt; D1[Session → Delete] --&gt; L[Long-Term Memory → Get Many&lt;br/&gt;by Session ID and User ID] --&gt; X{Anything?} --&gt;|yes| D2[Long-Term Memory → Delete] --&gt; O3[Respond: count]
+    X --&gt;|no| O4[Respond: 0]</code></pre>
+<ul>
+<li><strong>Trace.</strong> <code>{ "userId": "demo-user", "query": "where does the user live" }</code>. <strong>Search with sources</strong> finds up to three memories with <strong>Include Sources</strong> on, which puts each memory's <code>sources</code> (kind, session, <code>eventIds</code>) on the record with no extra request. <strong>Has a session source?</strong> (IF) splits them: with one, <strong>Read the session</strong> gets the session with <strong>Include Summarized Events</strong> on, so evidence is found even after the session was summarized, and <strong>Evidence report</strong> (Set) pairs the memory with the events whose IDs are in <code>eventIds</code>, as <code>role (time): text</code> lines; without one, <strong>No sources</strong> (Set) reports the memory with a note, since a memory created directly, by a Save tool for instance, has nothing that extracted it. <strong>Collect the report</strong> (Merge) joins both, and the response lists every memory. <em>Always Output Data</em> on the search makes an empty match answer too.</li>
+<li><strong>Correct.</strong> <code>{ "userId": "demo-user", "query": "where does the user live", "text": "The user lives in Madrid." }</code>. <strong>Find the memory</strong> is Search with <strong>Limit</strong> 1 for the user, by <code>query</code> or, when there is none, by the new <code>text</code> itself, which finds the closest existing fact; <strong>Found one?</strong> (IF) guards it; <strong>Rewrite the memory</strong> is Long-Term Memory → Update with the new <strong>Text</strong>; the memory keeps its ID and sources. No match answers <code>{ "corrected": false }</code>.</li>
+<li><strong>Forget a thread.</strong> <code>{ "userId": "demo-user", "sessionId": "…" }</code>. <strong>The user's sessions</strong> (Session → Get Many by <strong>User ID</strong>), <strong>Collect sessions</strong> (Aggregate) and <strong>Pick the thread</strong> (Set) choose the session: the one named in the request, or the user's most recently updated one when none is. Then <strong>Delete the session</strong>, <strong>Memories extracted from it</strong> (Get Many with the <strong>Session ID</strong> and <strong>User ID</strong> filters, Return All, <em>Always Output Data</em>), <strong>Anything to delete?</strong> (IF) and <strong>Delete memory</strong> for each; the response reports <code>memoriesDeleted</code>.</li>
+</ul>
+<h3 id="try-it_4">Try it<a class="headerlink" href="#try-it_4" title="Permanent link">&para;</a></h3>
+<p>Seed memories first by chatting with another example as <code>demo-user</code>; extraction takes up to a minute or two. Each webhook carries a pinned sample request for <code>demo-user</code>, so the three flows run in the editor without a client:</p>
+<ol>
+<li>Open <strong>Respond with the report</strong> and choose <strong>Execute step</strong>. The pinned request is <code>{ "userId": "demo-user", "query": "where does the user live" }</code>; the report lists each matching memory with its evidence, or with a note when nothing extracted it.</li>
+<li>Open <strong>Respond with the memory</strong> and choose <strong>Execute step</strong>. The pinned request is <code>{ "userId": "demo-user", "query": "where does the user live", "text": "The user lives in Madrid." }</code>. Run the trace again to see the corrected text.</li>
+<li>Open <strong>Respond: thread forgotten</strong> and choose <strong>Execute step</strong>. The pinned request is <code>{ "userId": "demo-user" }</code>, so the user's most recent session and the memories extracted from it go; add a <code>sessionId</code> from the report to pick a thread. Run the trace once more to see that they are gone.</li>
+</ol>
+<p>Pinned data applies to editor runs only. To call the live endpoints, activate the workflow and send the same bodies:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>https://your-n8n/webhook/memory/trace<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">'{"userId": "demo-user", "query": "where does the user live"}'</span>
+</code></pre></div>
+<h3 id="make-it-yours_4">Make it yours<a class="headerlink" href="#make-it-yours_4" title="Permanent link">&para;</a></h3>
+<p>Put the webhooks behind header or JWT authentication: they read and delete user data. For a review queue of facts from an untrusted channel, run the trace on <strong>Get Many</strong> with the <strong>Session ID</strong> filter instead of Search. Document sources (<code>kind: DOCUMENT</code>) appear once a store ingests documents; the Filter node leaves them out of the session trace.</p>
+<hr />
+<h2 id="backfill-history">Backfill history<a class="headerlink" href="#backfill-history" title="Permanent link">&para;</a></h2>
+<p><strong>File:</strong> <a href="https://github.com/redis/n8n-nodes-agent-memory/blob/main/examples/backfill-history.json"><code>backfill-history.json</code></a></p>
+<h3 id="the-gap_5">The gap<a class="headerlink" href="#the-gap_5" title="Permanent link">&para;</a></h3>
+<p>"How do I import a year of chat history?" is a recurring forum question (3,303 and 2,268 views on the top threads), and a new deployment that knows nothing about returning customers is a poor first impression. Two import paths, one node each.</p>
+<h3 id="what-it-does_5">What it does<a class="headerlink" href="#what-it-does_5" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    R[Run once] --&gt; C1[Past conversations&lt;br/&gt;sample rows] --&gt; E[Session → Add Event&lt;br/&gt;with Created At] --&gt; W[Wait 90 s] --&gt; S[Search&lt;br/&gt;Include Sources]
+    R --&gt; C2[Known facts&lt;br/&gt;sample rows] --&gt; M[Long-Term Memory → Create&lt;br/&gt;with Topics]</code></pre>
+<ul>
+<li><strong>Past conversations (sample rows)</strong> (Code) yields six rows of two old conversations: <code>sessionId</code>, <code>userId</code>, <code>role</code>, <code>text</code>, <code>createdAt</code>.</li>
+<li><strong>Replay into sessions</strong> is Session → Add Event per row, with <strong>Created At</strong> under Additional Fields set from the row, so the events keep their original timestamps. The server summarizes the sessions and extracts long-term facts from them, exactly as for a live chat.</li>
+<li><strong>Known facts (sample rows)</strong> (Code) yields three CRM-style facts with <code>topics</code>.</li>
+<li><strong>Write facts as memories</strong> is Long-Term Memory → Create per row, with <strong>Topics</strong> under Additional Fields. No extraction wait: the facts are searchable at once.</li>
+<li><strong>Wait for extraction</strong> gives the server 90 seconds, then <strong>What is remembered now?</strong> searches the user's memories with <strong>Include Sources</strong> on: the imported facts (no sources) and the extracted ones (each pointing at the imported session it came from).</li>
+</ul>
+<h3 id="try-it_5">Try it<a class="headerlink" href="#try-it_5" title="Permanent link">&para;</a></h3>
+<p>Run the workflow. Then chat with any agent example as <code>demo-user</code>: it knows Maria's bakery, the vegan menu and the Monday closing.</p>
+<h3 id="make-it-yours_5">Make it yours<a class="headerlink" href="#make-it-yours_5" title="Permanent link">&para;</a></h3>
+<p>Replace the two Code nodes with Google Sheets, Postgres, a CSV through <em>Extract From File</em>, or your CRM, and keep the column names. Add <strong>Namespace ID</strong> under Additional Fields on both Redis nodes to import into a namespace. Role values are <code>USER</code>, <code>ASSISTANT</code> and <code>SYSTEM</code>. Each row is one request; for very large imports, run the workflow in batches with <em>Loop Over Items</em>.</p>
+
+
+
+
+
+
+
+  
+    
+  
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="November 9, 2026 15:41:11 UTC">November 9, 2026</span>
+  </span>
+
+    
+    
+    
+    
+  </aside>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/redis/n8n-nodes-agent-memory" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.npmjs.com/package/@redis/n8n-nodes-agent-memory" target="_blank" rel="noopener" title="www.npmjs.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M288 288h-32v-64h32zm288-128v192H288v32H160v-32H0V160zm-416 32H32v128h64v-96h32v96h32zm160 0H192v160h64v-32h64zm224 0H352v128h64v-96h32v96h32v-96h32v96h32z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>

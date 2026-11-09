@@ -1,0 +1,2729 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Memory for n8n AI Agents, backed by Redis Agent Memory">
+      
+      
+        <meta name="author" content="Redis">
+      
+      
+        <link rel="canonical" href="https://redis.github.io/n8n-nodes-agent-memory/latest/reference/operations/">
+      
+      
+        <link rel="prev" href="../../examples/">
+      
+      
+        <link rel="next" href="../../development/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../logo-dark.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Operations - Redis Agent Memory for n8n</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#operations" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Redis Agent Memory for n8n" class="md-header__button md-logo" aria-label="Redis Agent Memory for n8n" data-md-component="logo">
+      
+  <img src="../../logo-dark.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Redis Agent Memory for n8n
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Operations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="red" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="red" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/redis/n8n-nodes-agent-memory" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    redis/n8n-nodes-agent-memory
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/data-model/" class="md-tabs__link">
+          
+  
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../examples/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Examples
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../development/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Development
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Redis Agent Memory for n8n" class="md-nav__button md-logo" aria-label="Redis Agent Memory for n8n" data-md-component="logo">
+      
+  <img src="../../logo-dark.svg" alt="logo">
+
+    </a>
+    Redis Agent Memory for n8n
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/redis/n8n-nodes-agent-memory" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    redis/n8n-nodes-agent-memory
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/data-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Users, Sessions and Namespaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/chat-memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chat Memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/action-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Action Node and Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/summary-views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Summary Views
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/provenance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#redis-agent-chat-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis Agent Chat Memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redis-agent-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis Agent Memory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Redis Agent Memory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#long-term-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Long-Term Memory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Long-Term Memory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#search-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Search (search)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-create" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create (create)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-get" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-sources-getsources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Sources (getSources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#update-update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update (update)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#move-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Move (move)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-get_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-delete_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-event-addevent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add Event (addEvent)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-event-deleteevent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delete Event (deleteEvent)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Namespace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-create_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create (create)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-get-update-update-delete-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get), Update (update), Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary View
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Summary View">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-result-getresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Result (getResult)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refresh-refresh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refresh (refresh)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-create_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create (create)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-get-delete-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get), Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#update-update_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update (update)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#credential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#redis-agent-chat-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis Agent Chat Memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redis-agent-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redis Agent Memory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Redis Agent Memory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#long-term-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Long-Term Memory
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Long-Term Memory">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#search-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Search (search)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-create" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create (create)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-get" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-sources-getsources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Sources (getSources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#update-update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update (update)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#move-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Move (move)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-get_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-delete_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-event-addevent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add Event (addEvent)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-event-deleteevent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delete Event (deleteEvent)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#namespace" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespace
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Namespace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-create_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create (create)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-get-update-update-delete-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get), Update (update), Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary View
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Summary View">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-result-getresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Result (getResult)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refresh-refresh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refresh (refresh)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-create_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create (create)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-get-delete-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get (get), Delete (delete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-many-getall_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get Many (getAll)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#update-update_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update (update)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#credential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="operations">Operations<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h1>
+<p>Every parameter of <strong>Redis Agent Chat Memory</strong> and <strong>Redis Agent Memory</strong>, by resource and operation. <strong>Redis Agent Memory Tool</strong> is the action node in the AI Agent's Tool picker and has the same parameters. Parameter names in <code>code</code> are the keys in a workflow's JSON, useful when you set them by expression or edit an exported workflow.</p>
+<h2 id="redis-agent-chat-memory">Redis Agent Chat Memory<a class="headerlink" href="#redis-agent-chat-memory" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Session ID</td>
+<td><code>sessionId</code></td>
+<td><code>{{ $json.sessionId }}</code></td>
+<td>Conversation identifier.</td>
+</tr>
+<tr>
+<td>User ID</td>
+<td><code>ownerId</code></td>
+<td></td>
+<td>The user the conversation belongs to. Extracted long-term memories are owned by this user.</td>
+</tr>
+<tr>
+<td>Recall Long-Term Memories</td>
+<td><code>recallLongTermMemories</code></td>
+<td>off</td>
+<td>Search the user's long-term memories on every turn and give the results to the model.</td>
+</tr>
+<tr>
+<td>Recall Query</td>
+<td><code>recallQuery</code></td>
+<td><code>{{ $json.chatInput }}</code></td>
+<td>Text to search long-term memories with. Shown when recall is on.</td>
+</tr>
+<tr>
+<td>Recall Limit</td>
+<td><code>recallLimit</code></td>
+<td>5</td>
+<td>Max number of long-term memories to recall per turn.</td>
+</tr>
+<tr>
+<td>Options → Context Window Length</td>
+<td><code>options.windowSize</code></td>
+<td>50</td>
+<td>How many past interactions are sent to the model (1–500).</td>
+</tr>
+<tr>
+<td>Options → Include Summary</td>
+<td><code>options.includeSummary</code></td>
+<td>on</td>
+<td>Prepend the server's summary of older turns.</td>
+</tr>
+<tr>
+<td>Options → Namespace ID</td>
+<td><code>options.namespaceId</code></td>
+<td></td>
+<td>Bind the session to a namespace.</td>
+</tr>
+<tr>
+<td>Options → Summary View ID</td>
+<td><code>options.summaryViewId</code></td>
+<td></td>
+<td>Give the model this view's summary of the user on every turn.</td>
+</tr>
+<tr>
+<td>Options → Verify Session Owner</td>
+<td><code>options.verifyOwner</code></td>
+<td>off</td>
+<td>Refuse a session the server says belongs to another user.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="redis-agent-memory">Redis Agent Memory<a class="headerlink" href="#redis-agent-memory" title="Permanent link">&para;</a></h2>
+<p>Resource is <code>resource</code>, operation is <code>operation</code>. The resource values are <code>longTermMemory</code>, <code>session</code>, <code>namespace</code> and <code>summaryView</code>.</p>
+<h3 id="long-term-memory">Long-Term Memory<a class="headerlink" href="#long-term-memory" title="Permanent link">&para;</a></h3>
+<h4 id="search-search">Search (<code>search</code>)<a class="headerlink" href="#search-search" title="Permanent link">&para;</a></h4>
+<p>Search a user's long-term memories by meaning.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Query</td>
+<td><code>query</code></td>
+<td>yes</td>
+<td>Text to search for. Memories are ranked by meaning, not by keyword.</td>
+</tr>
+<tr>
+<td>User ID</td>
+<td><code>ownerId</code></td>
+<td>yes</td>
+<td>Only memories owned by this user are searched.</td>
+</tr>
+<tr>
+<td>Limit</td>
+<td><code>limit</code></td>
+<td></td>
+<td>Max number of results, 1–100 (default 50).</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Include Sources</td>
+<td><code>includeSources</code></td>
+<td></td>
+<td>Keep where each memory came from, in short form. Shown when Simplify is on.</td>
+</tr>
+<tr>
+<td>Options → Memory Type</td>
+<td><code>options.memoryType</code></td>
+<td></td>
+<td>Only memories of this type, built-in or custom.</td>
+</tr>
+<tr>
+<td>Options → Namespace ID</td>
+<td><code>options.namespaceId</code></td>
+<td></td>
+<td>Only memories in this namespace.</td>
+</tr>
+<tr>
+<td>Options → Session ID</td>
+<td><code>options.sessionId</code></td>
+<td></td>
+<td>Only memories extracted from this session.</td>
+</tr>
+<tr>
+<td>Options → Similarity Threshold</td>
+<td><code>options.similarityThreshold</code></td>
+<td></td>
+<td>Minimum similarity, 0–1. 0 returns the closest matches regardless of score.</td>
+</tr>
+<tr>
+<td>Options → Topics</td>
+<td><code>options.topics</code></td>
+<td></td>
+<td>Only memories tagged with any of these topics, comma-separated.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-many-getall">Get Many (<code>getAll</code>)<a class="headerlink" href="#get-many-getall" title="Permanent link">&para;</a></h4>
+<p>List long-term memories that match the filters. At least one filter is required.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Return All</td>
+<td><code>returnAll</code></td>
+<td>Return every result instead of the first Limit.</td>
+</tr>
+<tr>
+<td>Limit</td>
+<td><code>limit</code></td>
+<td>Max number of results, 1–100 (default 50).</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Include Sources</td>
+<td><code>includeSources</code></td>
+<td>As on Search.</td>
+</tr>
+<tr>
+<td>Filters → Memory Type</td>
+<td><code>filters.memoryType</code></td>
+<td>Only memories of this type.</td>
+</tr>
+<tr>
+<td>Filters → Namespace ID</td>
+<td><code>filters.namespaceId</code></td>
+<td>Only memories in this namespace.</td>
+</tr>
+<tr>
+<td>Filters → Session ID</td>
+<td><code>filters.sessionId</code></td>
+<td>Only memories extracted from this session.</td>
+</tr>
+<tr>
+<td>Filters → Topics</td>
+<td><code>filters.topics</code></td>
+<td>Any of these topics, comma-separated.</td>
+</tr>
+<tr>
+<td>Filters → User ID</td>
+<td><code>filters.ownerId</code></td>
+<td>Only memories owned by this user.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="create-create">Create (<code>create</code>)<a class="headerlink" href="#create-create" title="Permanent link">&para;</a></h4>
+<p>Store a fact as a long-term memory of a user. Creating the same Memory ID again replaces the memory with the fields given.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Text</td>
+<td><code>text</code></td>
+<td>yes</td>
+<td>The fact to remember, in plain language.</td>
+</tr>
+<tr>
+<td>User ID</td>
+<td><code>ownerId</code></td>
+<td>yes</td>
+<td>Owner of the memory.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Additional Fields → Memory ID</td>
+<td><code>additionalFields.memoryId</code></td>
+<td></td>
+<td>Letters, digits and dashes. Generated when empty.</td>
+</tr>
+<tr>
+<td>Additional Fields → Memory Type</td>
+<td><code>additionalFields.memoryType</code></td>
+<td></td>
+<td>Built-in or a custom type registered on the store.</td>
+</tr>
+<tr>
+<td>Additional Fields → Namespace ID</td>
+<td><code>additionalFields.namespaceId</code></td>
+<td></td>
+<td>Namespace to place the memory in.</td>
+</tr>
+<tr>
+<td>Additional Fields → Session ID</td>
+<td><code>additionalFields.sessionId</code></td>
+<td></td>
+<td>Session the memory came from.</td>
+</tr>
+<tr>
+<td>Additional Fields → Topics</td>
+<td><code>additionalFields.topics</code></td>
+<td></td>
+<td>Topic tags, comma-separated.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-get">Get (<code>get</code>)<a class="headerlink" href="#get-get" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Memory ID</td>
+<td><code>memoryId</code></td>
+<td>yes</td>
+<td>ID of the memory.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Include Sources</td>
+<td><code>includeSources</code></td>
+<td></td>
+<td>As on Search.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-sources-getsources">Get Sources (<code>getSources</code>)<a class="headerlink" href="#get-sources-getsources" title="Permanent link">&para;</a></h4>
+<p>List the sessions or documents a memory was extracted from, with the evidence. One output item per source.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Memory ID</td>
+<td><code>memoryId</code></td>
+<td>yes</td>
+<td>ID of the memory.</td>
+</tr>
+<tr>
+<td>Return All</td>
+<td><code>returnAll</code></td>
+<td></td>
+<td>Return every source.</td>
+</tr>
+<tr>
+<td>Limit</td>
+<td><code>limit</code></td>
+<td></td>
+<td>Max number of sources, 1–100 (default 50).</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="update-update">Update (<code>update</code>)<a class="headerlink" href="#update-update" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Memory ID</td>
+<td><code>memoryId</code></td>
+<td>yes</td>
+<td>ID of the memory.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Update Fields → Memory Type</td>
+<td><code>updateFields.memoryType</code></td>
+<td></td>
+<td>New type.</td>
+</tr>
+<tr>
+<td>Update Fields → Namespace ID</td>
+<td><code>updateFields.namespaceId</code></td>
+<td></td>
+<td>New namespace.</td>
+</tr>
+<tr>
+<td>Update Fields → Session ID</td>
+<td><code>updateFields.sessionId</code></td>
+<td></td>
+<td>New source session.</td>
+</tr>
+<tr>
+<td>Update Fields → Text</td>
+<td><code>updateFields.text</code></td>
+<td></td>
+<td>New content.</td>
+</tr>
+<tr>
+<td>Update Fields → Topics</td>
+<td><code>updateFields.topics</code></td>
+<td></td>
+<td>Replaces the existing topics.</td>
+</tr>
+<tr>
+<td>Update Fields → User ID</td>
+<td><code>updateFields.ownerId</code></td>
+<td></td>
+<td>New owner.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="delete-delete">Delete (<code>delete</code>)<a class="headerlink" href="#delete-delete" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Memory ID</td>
+<td><code>memoryId</code></td>
+<td>yes</td>
+<td>ID of the memory. Returns <code>{ deleted: true, memoryId }</code>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="move-move">Move (<code>move</code>)<a class="headerlink" href="#move-move" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Memory ID</td>
+<td><code>memoryId</code></td>
+<td>yes</td>
+<td>ID of the memory.</td>
+</tr>
+<tr>
+<td>Namespace</td>
+<td><code>namespaceId</code></td>
+<td>yes</td>
+<td>Resource locator: from the store's list (<code>mode: "list"</code>) or an ID or expression (<code>mode: "id"</code>).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="session">Session<a class="headerlink" href="#session" title="Permanent link">&para;</a></h3>
+<h4 id="get-get_1">Get (<code>get</code>)<a class="headerlink" href="#get-get_1" title="Permanent link">&para;</a></h4>
+<p>Get the events and summary of a session.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Session ID</td>
+<td><code>sessionId</code></td>
+<td>yes</td>
+<td>ID of the session.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Options → Include Summarized Events</td>
+<td><code>options.includeSummarisedEvents</code></td>
+<td></td>
+<td>Also return the older events the summary already covers.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-many-getall_1">Get Many (<code>getAll</code>)<a class="headerlink" href="#get-many-getall_1" title="Permanent link">&para;</a></h4>
+<p>List sessions. Without a filter, every session on the store. Each item has <code>sessionId</code>, <code>ownerId</code>, <code>namespaceId</code>, <code>createdAt</code> and <code>updatedAt</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Return All</td>
+<td><code>returnAll</code></td>
+<td>Return every session.</td>
+</tr>
+<tr>
+<td>Limit</td>
+<td><code>limit</code></td>
+<td>Max number of sessions (default 50).</td>
+</tr>
+<tr>
+<td>Filters → User ID</td>
+<td><code>filters.ownerId</code></td>
+<td>Only sessions owned by this user.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="delete-delete_1">Delete (<code>delete</code>)<a class="headerlink" href="#delete-delete_1" title="Permanent link">&para;</a></h4>
+<p>Delete a session with its events and summary. Long-term memories extracted from it stay.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Session ID</td>
+<td><code>sessionId</code></td>
+<td>yes</td>
+<td>Returns <code>{ deleted: true, sessionId }</code>.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="add-event-addevent">Add Event (<code>addEvent</code>)<a class="headerlink" href="#add-event-addevent" title="Permanent link">&para;</a></h4>
+<p>Append a message to a session. The session is created when it does not exist.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Session ID</td>
+<td><code>sessionId</code></td>
+<td>yes</td>
+<td>ID of the session.</td>
+</tr>
+<tr>
+<td>User ID</td>
+<td><code>ownerId</code></td>
+<td>yes</td>
+<td>User the message belongs to. Extracted memories are owned by this user.</td>
+</tr>
+<tr>
+<td>Role</td>
+<td><code>role</code></td>
+<td></td>
+<td><code>USER</code> (default), <code>ASSISTANT</code> or <code>SYSTEM</code>.</td>
+</tr>
+<tr>
+<td>Text</td>
+<td><code>text</code></td>
+<td>yes</td>
+<td>Content of the message.</td>
+</tr>
+<tr>
+<td>Additional Fields → Created At</td>
+<td><code>additionalFields.createdAt</code></td>
+<td></td>
+<td>When the message was said. Defaults to now.</td>
+</tr>
+<tr>
+<td>Additional Fields → Namespace ID</td>
+<td><code>additionalFields.namespaceId</code></td>
+<td></td>
+<td>Bind the session to a namespace.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="delete-event-deleteevent">Delete Event (<code>deleteEvent</code>)<a class="headerlink" href="#delete-event-deleteevent" title="Permanent link">&para;</a></h4>
+<p>Delete one event, keeping the rest and the summary.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Session ID</td>
+<td><code>sessionId</code></td>
+<td>yes</td>
+<td>ID of the session.</td>
+</tr>
+<tr>
+<td>Event ID</td>
+<td><code>eventId</code></td>
+<td>yes</td>
+<td>ID of the event. Session → Get returns the IDs.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="namespace">Namespace<a class="headerlink" href="#namespace" title="Permanent link">&para;</a></h3>
+<h4 id="create-create_1">Create (<code>create</code>)<a class="headerlink" href="#create-create_1" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td><code>name</code></td>
+<td>yes</td>
+<td>Name of the namespace.</td>
+</tr>
+<tr>
+<td>Scope</td>
+<td><code>scope</code></td>
+<td></td>
+<td><code>SHARED</code> (default) or <code>PERSONAL</code>. Ignored when Parent ID is set: a child inherits its parent's scope.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Additional Fields → Parent ID</td>
+<td><code>additionalFields.parentId</code></td>
+<td></td>
+<td>Nest under this namespace.</td>
+</tr>
+<tr>
+<td>Additional Fields → User ID</td>
+<td><code>additionalFields.ownerId</code></td>
+<td></td>
+<td>Owner, for personal namespaces.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-get-update-update-delete-delete">Get (<code>get</code>), Update (<code>update</code>), Delete (<code>delete</code>)<a class="headerlink" href="#get-get-update-update-delete-delete" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Namespace</td>
+<td><code>namespaceId</code></td>
+<td>yes</td>
+<td>Resource locator: list, or ID or expression.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Get and Update. Default on.</td>
+</tr>
+<tr>
+<td>Update Fields → Name</td>
+<td><code>updateFields.name</code></td>
+<td></td>
+<td>New name.</td>
+</tr>
+<tr>
+<td>Update Fields → Archive</td>
+<td><code>updateFields.archive</code></td>
+<td></td>
+<td>Archive the namespace. The API cannot make an archived namespace active again.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-many-getall_2">Get Many (<code>getAll</code>)<a class="headerlink" href="#get-many-getall_2" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Return All</td>
+<td><code>returnAll</code></td>
+<td>Return every namespace.</td>
+</tr>
+<tr>
+<td>Limit</td>
+<td><code>limit</code></td>
+<td>Max number (default 50).</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td>Default on.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="summary-view">Summary View<a class="headerlink" href="#summary-view" title="Permanent link">&para;</a></h3>
+<h4 id="get-result-getresult">Get Result (<code>getResult</code>)<a class="headerlink" href="#get-result-getresult" title="Permanent link">&para;</a></h4>
+<p>Read the summary of one group.</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>View</td>
+<td><code>viewId</code></td>
+<td>yes</td>
+<td>Resource locator: list, or ID or expression.</td>
+</tr>
+<tr>
+<td>Group → User ID / Session ID / Namespace ID / Memory Type</td>
+<td><code>group.ownerId</code>, <code>group.sessionId</code>, <code>group.namespaceId</code>, <code>group.memoryType</code></td>
+<td></td>
+<td>The keys the view groups by.</td>
+</tr>
+<tr>
+<td>Wait For Result</td>
+<td><code>waitForResult</code></td>
+<td></td>
+<td>Poll every 2 seconds until <code>READY</code>, <code>EMPTY</code> or <code>FAILED</code>.</td>
+</tr>
+<tr>
+<td>Max Wait (Seconds)</td>
+<td><code>maxWaitSeconds</code></td>
+<td></td>
+<td>Fail after this long (default 60). Shown when waiting.</td>
+</tr>
+<tr>
+<td>Options → Include Source Memory IDs</td>
+<td><code>options.includeSourceMemoryIds</code></td>
+<td></td>
+<td>Return the IDs of the memories the summary was computed from.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="refresh-refresh">Refresh (<code>refresh</code>)<a class="headerlink" href="#refresh-refresh" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>View</td>
+<td><code>viewId</code></td>
+<td>yes</td>
+<td>Resource locator.</td>
+</tr>
+<tr>
+<td>Target</td>
+<td><code>target</code></td>
+<td></td>
+<td><code>PARTITION</code> (default): one group, selected by Group. <code>FULL</code>: every group.</td>
+</tr>
+<tr>
+<td>Group → …</td>
+<td><code>group.*</code></td>
+<td></td>
+<td>For a Partition refresh, the group to recompute.</td>
+</tr>
+<tr>
+<td>Wait For Result, Max Wait</td>
+<td><code>waitForResult</code>, <code>maxWaitSeconds</code></td>
+<td></td>
+<td>Partition only.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="create-create_2">Create (<code>create</code>)<a class="headerlink" href="#create-create_2" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td><code>name</code></td>
+<td>yes</td>
+<td>Name of the view.</td>
+</tr>
+<tr>
+<td>Group By</td>
+<td><code>groupBy</code></td>
+<td>yes</td>
+<td>Array of <code>ownerId</code>, <code>sessionId</code>, <code>namespaceId</code>, <code>memoryType</code> (default <code>["ownerId"]</code>).</td>
+</tr>
+<tr>
+<td>Output Format</td>
+<td><code>outputFormat</code></td>
+<td></td>
+<td><code>TEXT</code> (default) or <code>STRUCTURED</code>.</td>
+</tr>
+<tr>
+<td>Instructions</td>
+<td><code>instructions</code></td>
+<td></td>
+<td>What the summary should focus on.</td>
+</tr>
+<tr>
+<td>Refresh Mode</td>
+<td><code>refreshMode</code></td>
+<td></td>
+<td><code>MANUAL</code> (default) or <code>CONTINUOUS</code>.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Additional Fields</td>
+<td><code>additionalFields.*</code></td>
+<td></td>
+<td><code>debounceSeconds</code>, <code>description</code>, <code>maxPartitions</code>, <code>memoryType</code>, <code>namespaceId</code>, <code>reconcileIntervalSeconds</code>, <code>schema</code> (JSON, <code>{ "fields": [...] }</code>), <code>sessionId</code>, <code>timeWindowSeconds</code>, <code>topics</code>, <code>ownerId</code>, <code>visibility</code> (<code>PRIVATE</code> default, or <code>SHARED</code>).</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-get-delete-delete">Get (<code>get</code>), Delete (<code>delete</code>)<a class="headerlink" href="#get-get-delete-delete" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>View</td>
+<td><code>viewId</code></td>
+<td>yes</td>
+<td>Resource locator.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Get only. Default on.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="get-many-getall_3">Get Many (<code>getAll</code>)<a class="headerlink" href="#get-many-getall_3" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Return All</td>
+<td><code>returnAll</code></td>
+<td>Return every view.</td>
+</tr>
+<tr>
+<td>Limit</td>
+<td><code>limit</code></td>
+<td>Max number (default 50).</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td>Default on.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="update-update_1">Update (<code>update</code>)<a class="headerlink" href="#update-update_1" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Key</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>View</td>
+<td><code>viewId</code></td>
+<td>yes</td>
+<td>Resource locator.</td>
+</tr>
+<tr>
+<td>Simplify</td>
+<td><code>simple</code></td>
+<td></td>
+<td>Default on.</td>
+</tr>
+<tr>
+<td>Update Fields</td>
+<td><code>updateFields.*</code></td>
+<td></td>
+<td>Every Create field (<code>name</code>, <code>groupBy</code>, <code>outputFormat</code>, <code>instructions</code>, <code>refreshMode</code> and the Additional Fields) plus <code>state</code> (<code>ACTIVE</code> or <code>DISABLED</code>), <code>clearFilter</code> and <code>clearTimeWindow</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="credential">Credential<a class="headerlink" href="#credential" title="Permanent link">&para;</a></h2>
+<p><strong>Redis Agent Memory API</strong> (<code>redisAgentMemoryApi</code>): <code>serverUrl</code> (host only; the nodes add <code>/iris/data/v1/agent-memory</code>), <code>storeId</code>, <code>apiKey</code>. The credential test calls the store's health endpoint.</p>
+
+
+
+
+
+
+
+  
+    
+  
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="November 9, 2026 15:41:11 UTC">November 9, 2026</span>
+  </span>
+
+    
+    
+    
+    
+  </aside>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/redis/n8n-nodes-agent-memory" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.npmjs.com/package/@redis/n8n-nodes-agent-memory" target="_blank" rel="noopener" title="www.npmjs.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M288 288h-32v-64h32zm288-128v192H288v32H160v-32H0V160zm-416 32H32v128h64v-96h32v96h32zm160 0H192v160h64v-32h64zm224 0H352v128h64v-96h32v96h32v-96h32v96h32z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>
