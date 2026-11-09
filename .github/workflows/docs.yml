@@ -1,0 +1,89 @@
+name: Documentation
+
+# The MkDocs site in docs/ is versioned with mike on the gh-pages branch:
+# main deploys to /latest/, which the site root redirects to. A pull request
+# gets the strict build only: a fork's token is read-only, so it cannot push
+# to gh-pages.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Install MkDocs
+        run: pip install -r docs/requirements.txt
+
+      # mike deploy does not build in strict mode, so this job is the gate.
+      - name: Build documentation
+        run: mkdocs build --strict
+
+  deploy:
+    name: Deploy Documentation
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Every mike command commits to gh-pages; one at a time.
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    environment:
+      name: docs
+      url: https://redis.github.io/n8n-nodes-agent-memory/latest/
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Install MkDocs
+        run: pip install -r docs/requirements.txt
+
+      - name: Prepare git for mike
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages || echo "No gh-pages branch yet; mike creates it."
+
+      - name: Deploy main as latest
+        run: |
+          mike deploy --push latest
+          mike set-default --push latest

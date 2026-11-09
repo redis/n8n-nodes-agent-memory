@@ -5,6 +5,7 @@
 - Node.js LTS (22 or later, the version n8n 2 runs on) and npm
 - Docker or Podman, for `npm run dev` and the end-to-end tests
 - Access to a Redis Agent Memory store, for the contract and end-to-end tests
+- Python 3.12 or [uv](https://docs.astral.sh/uv/), only to build the guide in `docs/`
 
 ## Setup
 
@@ -117,10 +118,57 @@ npm run e2e:down   # stop it
 ## Documentation
 
 - `README.md` is the user-facing documentation and is shown on npm.
+- `docs/` and `mkdocs.yml` are the guide at https://redis.github.io/n8n-nodes-agent-memory/,
+  built with [MkDocs](https://www.mkdocs.org/) and the Material theme. See
+  [Testing the guide](#testing-the-guide) below.
 - `docs/testing.md` describes the test layers and the end-to-end stack.
-- `docs/design-draft.md` holds the background and design decisions.
-- `examples/` holds workflows the README points to. When a node parameter changes, import them into n8n again to check that they still load and run.
+- `docs/design-draft.md` holds the background and design decisions. It and
+  `docs/0.3.0-features.md` are working documents, kept out of the guide by
+  `exclude_docs` in `mkdocs.yml`.
+- `examples/` holds the workflows the README and `docs/examples.md` describe.
+  When a node parameter changes, import them into n8n again to check that
+  they still load and run, and update `docs/examples.md` when a workflow
+  changes.
 - `AGENTS.md` and `.agents/` guide coding agents and contributors.
+
+### Testing the guide
+
+The `Documentation` workflow builds the guide in strict mode on every pull
+request that touches `docs/`, `mkdocs.yml` or the workflow itself, and a
+warning fails the build. Run the same build before you push:
+
+```bash
+uvx --with-requirements docs/requirements.txt mkdocs build --strict
+```
+
+or, without uv:
+
+```bash
+pip install -r docs/requirements.txt
+mkdocs build --strict
+```
+
+The build writes to `site/`, which git ignores. Strict mode fails on a link
+to a page or heading that does not exist, a page that is missing from `nav`
+in `mkdocs.yml`, and a broken Markdown extension (`validation` in
+`mkdocs.yml` turns the first two from log lines into failures). It cannot
+see how a page renders, so also look at the pages you changed in a browser:
+
+```bash
+uvx --with-requirements docs/requirements.txt mkdocs serve
+```
+
+The site reloads at http://127.0.0.1:8000/ as you edit. Check:
+
+- **Diagrams and tabs.** Mermaid blocks (```` ```mermaid ````) and tabbed
+  blocks (`=== "Tab"`) render only in the browser; a syntax error shows as
+  raw text or an empty box.
+- **Tables.** A missing `|` turns a table into a paragraph without a warning.
+- **Navigation.** A new page needs an entry in `nav`; put it where a reader
+  would look for it, and link it from `docs/index.md`.
+
+If you add a working document to `docs/` that is not part of the guide, add
+it to `exclude_docs` in `mkdocs.yml`.
 
 The repository keeps no changelog file. `npm run release` generates the GitHub
 release notes from the commit list, so write each commit subject as the line a
@@ -161,9 +209,10 @@ minor version.
    `Release <version>`, click **Generate release notes**, and tidy the list.
    Tick **Set as a pre-release** only to publish under the npm dist-tag
    `next`; a pre-release opens no bump pull request.
-4. Click **Publish release**. Watch **Actions → Publish**: the `publish` job
-   refuses to run when the tag and `package.json` disagree, then lints,
-   builds and publishes with provenance; the `bump` job opens the
+4. Click **Publish release**. Watch **Actions → Publish**. It runs the CI
+   and E2E workflows on the tagged commit first; then the `publish` job
+   refuses to run when the tag and `package.json` disagree, lints, builds
+   and publishes with provenance; then the `bump` job opens the
    next-version pull request.
 5. Check the result and merge the bump pull request:
 
@@ -176,9 +225,13 @@ minor version.
    `GITHUB_TOKEN`, so the bump pull request has no CI checks unless the
    repository has a `RELEASE_PR_TOKEN` secret (see the workflow header).
 
-If the `publish` job fails before `npm publish`, delete the release and its
-tag, fix `main`, and publish the release again. npm never accepts the same
-version twice, so a failure after a successful publish needs a new version.
+If a run fails before `npm publish`, fix `main`, then open **Actions →
+Publish → Run workflow** and enter the tag of the existing release. The
+workflow runs the same jobs on that tag; the release and tag stay as they
+are. If the tag itself is wrong (it does not match `package.json`), delete
+the release and the tag, fix `main`, and publish the release again. npm
+never accepts the same version twice, so a failure after a successful
+publish needs a new version.
 
 Do not run `npm run release` on your machine. Outside GitHub Actions it runs
 release-it, which bumps, commits, tags and pushes a tag; a pushed tag creates

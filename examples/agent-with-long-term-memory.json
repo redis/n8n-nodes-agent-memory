@@ -114,7 +114,7 @@
         "operation": "search",
         "query": "={{ $fromAI('query', \"What to look for in the user's memories\", 'string') }}",
         "ownerId": "={{ $('Identify the user').item.json.userId }}",
-        "maxResults": 5,
+        "limit": 5,
         "options": {}
       },
       "id": "search-tool",

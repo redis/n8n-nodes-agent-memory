@@ -34,6 +34,22 @@ on:
         type: boolean
         required: false
         default: false
+  # The Publish workflow runs this on the release tag before it publishes.
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out; the caller’s ref when empty'
+        required: false
+        type: string
+        default: ''
+      n8n_image_tag:
+        required: false
+        type: string
+        default: '2.42.6'
+      slow_tests:
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: e2e-${{ github.ref }}-${{ github.event_name }}
@@ -60,6 +76,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

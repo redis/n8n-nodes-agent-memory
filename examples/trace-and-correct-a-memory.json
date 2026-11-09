@@ -1,0 +1,521 @@
+{
+  "id": "agentMemoryProvenance",
+  "name": "Trace, correct and forget: memory provenance (Redis Agent Memory)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Why does the agent believe that?\n\nCorrections (\"I moved from Berlin to Madrid\"), audit (\"which conversation produced this?\") and memory poisoning are rising concerns in the n8n forum and in Mem0's issue tracker, and no other n8n memory node shows where a memory came from. Every memory here carries its **sources**: the session and the exact events it was extracted from.\n\nThree small HTTP endpoints an operator or an admin workflow can call:\n\n**Trace** — `POST /webhook/memory/trace` `{ \"userId\": \"demo-user\", \"query\": \"where does the user live\" }`\nSearch with *Include Sources* → **Get Sources** → **Session → Get**. The reply lists each memory with the messages that produced it.\n\n**Correct** — `POST /webhook/memory/correct` `{ \"memoryId\": \"…\", \"text\": \"The user lives in Madrid.\" }`\nRewrites one memory in place.\n\n**Forget a thread** — `POST /webhook/memory/forget-thread` `{ \"userId\": \"demo-user\", \"sessionId\": \"…\" }`\nDeletes the session and every memory extracted from it: the fix for a conversation that came from an untrusted channel.\n\nSelect your **Redis Agent Memory API** credential on every Redis node. Seed memories first by chatting with another example in this folder as `demo-user`; extraction takes up to a minute or two.",
+        "height": 700,
+        "width": 500
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -840,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "memory/trace",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "trace-webhook",
+      "name": "Trace a memory",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -240
+      ],
+      "webhookId": "9e4b2f6d-5c9a-4b1e-d4fa-2a3b5c6d7e04"
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "search",
+        "query": "={{ $json.body.query }}",
+        "ownerId": "={{ $json.body.userId }}",
+        "limit": 3,
+        "options": {},
+        "includeSources": true
+      },
+      "id": "search-with-sources",
+      "name": "Search with sources",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "getSources",
+        "memoryId": "={{ $json.memoryId }}",
+        "returnAll": true
+      },
+      "id": "get-sources",
+      "name": "Get Sources",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        240,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-session",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "SESSION",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "session-sources",
+      "name": "Session sources only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "get",
+        "sessionId": "={{ $json.sessionId }}",
+        "options": {
+          "includeSummarisedEvents": true
+        }
+      },
+      "id": "read-session",
+      "name": "Read the session",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r-memory-id",
+              "name": "memoryId",
+              "value": "={{ $('Search with sources').item.json.memoryId }}",
+              "type": "string"
+            },
+            {
+              "id": "r-memory",
+              "name": "memory",
+              "value": "={{ $('Search with sources').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "r-created",
+              "name": "learnedAt",
+              "value": "={{ $('Search with sources').item.json.createdAt }}",
+              "type": "string"
+            },
+            {
+              "id": "r-session",
+              "name": "sessionId",
+              "value": "={{ $json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "r-evidence",
+              "name": "evidence",
+              "value": "={{ $json.events.filter(e => ($('Get Sources').item.json.eventIds ?? []).includes(e.eventId)).map(e => e.role + ' (' + e.createdAt + '): ' + e.text) }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "evidence-report",
+      "name": "Evidence report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "respond-trace",
+      "name": "Respond with the report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "memory/correct",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "correct-webhook",
+      "name": "Correct a memory",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        60
+      ],
+      "webhookId": "9e4b2f6d-5c9a-4b1e-d4fa-2a3b5c6d7e05"
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "update",
+        "memoryId": "={{ $json.body.memoryId }}",
+        "updateFields": {
+          "text": "={{ $json.body.text }}"
+        }
+      },
+      "id": "update-memory",
+      "name": "Rewrite the memory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      },
+      "id": "respond-correct",
+      "name": "Respond with the memory",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "memory/forget-thread",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "forget-webhook",
+      "name": "Forget a thread",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        360
+      ],
+      "webhookId": "9e4b2f6d-5c9a-4b1e-d4fa-2a3b5c6d7e06"
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "delete",
+        "sessionId": "={{ $json.body.sessionId }}"
+      },
+      "id": "delete-session",
+      "name": "Delete the session",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "ownerId": "={{ $('Forget a thread').item.json.body.userId }}",
+          "sessionId": "={{ $('Forget a thread').item.json.body.sessionId }}"
+        }
+      },
+      "id": "memories-from-thread",
+      "name": "Memories extracted from it",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        240,
+        360
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-memory",
+              "leftValue": "={{ $json.memoryId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "anything-to-delete",
+      "name": "Anything to delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "delete",
+        "memoryId": "={{ $json.memoryId }}"
+      },
+      "id": "delete-memory",
+      "name": "Delete memory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        720,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ sessionId: $('Forget a thread').first().json.body.sessionId, sessionDeleted: true, memoriesDeleted: $input.all().length }) }}",
+        "options": {}
+      },
+      "id": "respond-forgotten",
+      "name": "Respond: thread forgotten",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ sessionId: $('Forget a thread').first().json.body.sessionId, sessionDeleted: true, memoriesDeleted: 0 }) }}",
+        "options": {}
+      },
+      "id": "respond-nothing",
+      "name": "Respond: no memories from it",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        480
+      ]
+    }
+  ],
+  "connections": {
+    "Trace a memory": {
+      "main": [
+        [
+          {
+            "node": "Search with sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search with sources": {
+      "main": [
+        [
+          {
+            "node": "Get Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sources": {
+      "main": [
+        [
+          {
+            "node": "Session sources only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session sources only": {
+      "main": [
+        [
+          {
+            "node": "Read the session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the session": {
+      "main": [
+        [
+          {
+            "node": "Evidence report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evidence report": {
+      "main": [
+        [
+          {
+            "node": "Respond with the report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Correct a memory": {
+      "main": [
+        [
+          {
+            "node": "Rewrite the memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rewrite the memory": {
+      "main": [
+        [
+          {
+            "node": "Respond with the memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forget a thread": {
+      "main": [
+        [
+          {
+            "node": "Delete the session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete the session": {
+      "main": [
+        [
+          {
+            "node": "Memories extracted from it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memories extracted from it": {
+      "main": [
+        [
+          {
+            "node": "Anything to delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to delete?": {
+      "main": [
+        [
+          {
+            "node": "Delete memory",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: no memories from it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete memory": {
+      "main": [
+        [
+          {
+            "node": "Respond: thread forgotten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
