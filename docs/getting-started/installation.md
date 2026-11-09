@@ -41,6 +41,14 @@ Older n8n versions that ship `@n8n/ai-node-sdk` may work but are not tested.
 
     `npm run dev` runs n8n in a container from n8n 3.0 onward, so Docker or Podman is required. Use `npx n8n-node dev --external-n8n` to attach to an n8n you already run.
 
+!!! warning "Upgrading from 0.3.0 or earlier"
+    Version 0.4.0 renames two identifiers that n8n stores in workflow JSON, before the node is verified for n8n Cloud and the names are fixed for good:
+
+    - The chat memory sub-node's type is now `redisAgentChatMemory` (was `redisAgentMemoryChatMemory`). A workflow saved with an earlier version shows that node as unknown; delete it, add **Redis Agent Chat Memory** again and set its parameters.
+    - The **User ID** parameter of **Redis Agent Chat Memory** and of **Session → Add Event** is stored as `ownerId` (was `actorId`), the key every other operation already uses. A saved value under the old key is ignored, so open those nodes and set **User ID** again.
+
+    The display names, the credential and the stored data are unchanged.
+
 ## Create the credential
 
 Both nodes use one credential, **Redis Agent Memory API**, with three fields:

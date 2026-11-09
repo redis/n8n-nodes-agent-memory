@@ -160,7 +160,7 @@
 		{
 			"id": "node-memory",
 			"name": "Redis Agent Chat Memory",
-			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
 			"typeVersion": 1,
 			"position": [
 				260,
@@ -168,7 +168,7 @@
 			],
 			"parameters": {
 				"sessionId": "={{ $json.body.sessionId }}",
-				"actorId": "={{ $json.body.userId }}",
+				"ownerId": "={{ $json.body.userId }}",
 				"options": {}
 			},
 			"credentials": {
@@ -224,7 +224,7 @@
 		{
 			"id": "node-memory-verify-owner",
 			"name": "Redis Agent Chat Memory (verify owner)",
-			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
 			"typeVersion": 1,
 			"position": [
 				260,
@@ -232,7 +232,7 @@
 			],
 			"parameters": {
 				"sessionId": "={{ $json.body.sessionId }}",
-				"actorId": "={{ $json.body.userId }}",
+				"ownerId": "={{ $json.body.userId }}",
 				"options": {
 					"verifyOwner": true
 				}

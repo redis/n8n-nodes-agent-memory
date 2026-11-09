@@ -37,7 +37,7 @@ theme:
     - search.highlight
     - content.code.copy
     - content.code.annotate
-  logo: logo.svg
+  logo: logo-dark.svg
   favicon: logo-dark.svg
   icon:
     repo: fontawesome/brands/github

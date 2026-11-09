@@ -54,7 +54,7 @@
 			"dist/credentials/RedisAgentMemoryApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node.js",
+			"dist/nodes/RedisAgentChatMemory/RedisAgentChatMemory.node.js",
 			"dist/nodes/RedisAgentMemory/RedisAgentMemory.node.js"
 		]
 	},

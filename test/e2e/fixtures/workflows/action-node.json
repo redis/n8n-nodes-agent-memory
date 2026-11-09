@@ -282,7 +282,7 @@
 				"resource": "session",
 				"operation": "addEvent",
 				"sessionId": "={{ $json.body.sessionId }}",
-				"actorId": "={{ $json.body.userId }}",
+				"ownerId": "={{ $json.body.userId }}",
 				"role": "USER",
 				"text": "={{ $json.body.text }}",
 				"additionalFields": {

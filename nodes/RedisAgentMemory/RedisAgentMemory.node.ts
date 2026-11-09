@@ -855,7 +855,7 @@ class Operations {
 			}
 			case 'addEvent': {
 				const sessionId = this.required('sessionId', 'Session ID');
-				const actorId = this.required('actorId', 'User ID');
+				const ownerId = this.required('ownerId', 'User ID');
 				const text = this.required('text', 'Text');
 				const role = this.param<string>('role', 'USER');
 				const additionalFields = this.param<{ createdAt?: string; namespaceId?: string }>(
@@ -877,7 +877,7 @@ class Operations {
 					path: `/sessions/${encodeURIComponent(sessionId)}/events`,
 					body: {
 						idempotencyKey: newIdempotencyKey(),
-						actorId,
+						actorId: ownerId,
 						role,
 						content: [{ text }],
 						createdAt: new Date(createdAtMs).toISOString(),

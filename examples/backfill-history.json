@@ -46,7 +46,7 @@
         "resource": "session",
         "operation": "addEvent",
         "sessionId": "={{ $json.sessionId }}",
-        "actorId": "={{ $json.userId }}",
+        "ownerId": "={{ $json.userId }}",
         "role": "={{ $json.role }}",
         "text": "={{ $json.text }}",
         "additionalFields": {

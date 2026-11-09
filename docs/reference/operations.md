@@ -7,7 +7,7 @@ Every parameter of **Redis Agent Chat Memory** and **Redis Agent Memory**, by re
 | Parameter | Key | Default | Description |
 |---|---|---|---|
 | Session ID | `sessionId` | `{{ $json.sessionId }}` | Conversation identifier. |
-| User ID | `actorId` | | The user the conversation belongs to. Extracted long-term memories are owned by this user. |
+| User ID | `ownerId` | | The user the conversation belongs to. Extracted long-term memories are owned by this user. |
 | Recall Long-Term Memories | `recallLongTermMemories` | off | Search the user's long-term memories on every turn and give the results to the model. |
 | Recall Query | `recallQuery` | `{{ $json.chatInput }}` | Text to search long-term memories with. Shown when recall is on. |
 | Recall Limit | `recallLimit` | 5 | Max number of long-term memories to recall per turn. |
@@ -153,7 +153,7 @@ Append a message to a session. The session is created when it does not exist.
 | Parameter | Key | Required | Description |
 |---|---|---|---|
 | Session ID | `sessionId` | yes | ID of the session. |
-| User ID | `actorId` | yes | User the message belongs to. Extracted memories are owned by this user. |
+| User ID | `ownerId` | yes | User the message belongs to. Extracted memories are owned by this user. |
 | Role | `role` | | `USER` (default), `ASSISTANT` or `SYSTEM`. |
 | Text | `text` | yes | Content of the message. |
 | Additional Fields → Created At | `additionalFields.createdAt` | | When the message was said. Defaults to now. |

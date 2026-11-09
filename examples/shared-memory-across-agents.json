@@ -247,7 +247,7 @@
     {
       "parameters": {
         "sessionId": "=sales-{{ $json.sessionId }}",
-        "actorId": "={{ $json.userId }}",
+        "ownerId": "={{ $json.userId }}",
         "recallLongTermMemories": true,
         "options": {
           "namespaceId": "={{ $json.namespaceId }}"
@@ -255,7 +255,7 @@
       },
       "id": "sales-memory",
       "name": "Sales memory (shared namespace)",
-      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
       "typeVersion": 1,
       "position": [
         1080,
@@ -265,7 +265,7 @@
     {
       "parameters": {
         "sessionId": "=support-{{ $json.sessionId }}",
-        "actorId": "={{ $json.userId }}",
+        "ownerId": "={{ $json.userId }}",
         "recallLongTermMemories": true,
         "options": {
           "namespaceId": "={{ $json.namespaceId }}"
@@ -273,7 +273,7 @@
       },
       "id": "support-memory",
       "name": "Support memory (shared namespace)",
-      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
       "typeVersion": 1,
       "position": [
         1080,

@@ -198,7 +198,7 @@ Source: [Community Node Verification Guidelines](https://docs.n8n.io/connect/cre
 - **Inside the package** _(revised 2026-11-02)_:
     - Action node: **"Redis Agent Memory"**, the plain product name. n8n and the verified vendors give the plain name to the action node and a qualified name to the memory sub-node ("Redis" / "Redis Chat Memory", "Postgres" / "Postgres Chat Memory", "Cognee" / "Cognee Memory"). It is one node with three resources and `usableAsTool`, so the earlier idea of a separate "Redis Agent Memory Tool" or "Search Agent Memory" tool node does not apply. n8n appends " Tool" to the display name of every `usableAsTool` node when it offers it in the Tool picker (`packages/cli/src/tool-generation/ai-tools.ts`), so the same node is listed there as "Redis Agent Memory Tool". That name must not be declared in code: `n8n-nodes-redgres` declares a node "Redgres Tool" and the picker shows "Redgres Tool Tool". Docs name the node as the screen does in each context: "Redis Agent Memory" for a workflow step, "Redis Agent Memory Tool" on the Tool input (decided 2026-11-03, after the README had used the action-node name for both faces).
     - Survey of community pairs (2026-11-03, display names read from the published `dist` files of 15 packages that ship both a memory sub-node and an action node, among them Mem0, Cognee, Hindsight, Supermemory, MemorySync, Recallio, Couchbase, MemMachine, Engram, Flair, Redgres): 12 give the action node the bare brand and the sub-node brand + "Chat Memory" (6) or brand + "Memory" (6); 3 give the action node a role word instead ("MemMachine Manager", "Engram Admin", "Flair Write"). No community package pairs a memory sub-node with an action node for a core provider (Redis, Postgres, MongoDB, Zep, Xata, Motorhead); the ones that extend a core provider qualify the core name ("Redis Chat Memory (Isolated)", "Postgres Memory+", "Zep Memory v3"). The current names were kept.
-    - Memory sub-node: **"Redis Agent Chat Memory"**. It reads like its neighbours in the Memory slot picker ("Redis Chat Memory", "Postgres Chat Memory"), and "Agent" marks it as the Agent Memory product's. The first draft called both nodes "Redis Agent Memory", which put two identical entries in the main node search and in the tool picker, told apart only by their descriptions. The internal name stays `redisAgentMemoryChatMemory`. "Redis Agent Memory Chat Memory" would keep the full product name but is clumsy.
+    - Memory sub-node: **"Redis Agent Chat Memory"**. It reads like its neighbours in the Memory slot picker ("Redis Chat Memory", "Postgres Chat Memory"), and "Agent" marks it as the Agent Memory product's. The first draft called both nodes "Redis Agent Memory", which put two identical entries in the main node search and in the tool picker, told apart only by their descriptions. The internal name stays `redisAgentChatMemory`. "Redis Agent Memory Chat Memory" would keep the full product name but is clumsy.
     - Credential: "Redis Agent Memory API" (`redisAgentMemoryApi`).
 - **Before publishing:** publish rights on the `@redis` npm scope are needed. The current `@redis/client` maintainers can publish or grant access.
 
@@ -260,7 +260,7 @@ This is a survey of npm packages (inspected 2026-10-01). "Memory sub-node" means
 - **Minimum n8n version.** 2.16, per Cognee's PR. _(2026-11-02: nothing tests that floor, so the README claims only what the end-to-end suite runs on, n8n 2.42.6, plus the nightly run on the latest release, and `peerDependencies['@n8n/ai-node-sdk']` is `>=0.32.4`. Widen the claim when an older image joins the e2e matrix.)_
 - **Scaffolding.** The CLI generates the skeleton: `n8n-node new <name> --template programmatic/custom-chat-memory`.
 
-The pattern, as used in this repo's `../nodes/RedisAgentMemoryChatMemory`:
+The pattern, as used in this repo's `../nodes/RedisAgentChatMemory`:
 
 ```ts
 class AgentMemoryChatHistory extends BaseChatHistory {
@@ -340,7 +340,7 @@ The contract matches session memory almost one to one:
 | `addMessage` / `saveTurn` | `POST …/session-memory/events`, one event per message |
 | `clear` | `DELETE …/session-memory/{sessionId}` |
 
-This is what the `RedisAgentMemoryChatMemory` node does. _(The first draft returned the summary from `getMessages` as a system message; the first bullet below and §13 record why it moved to `loadMessages` and became a user message.)_ It also fills a gap: n8n's earlier memory-server nodes, Zep and Motorhead, offered server-side summaries but are now deprecated and hidden from the node panel.
+This is what the `RedisAgentChatMemory` node does. _(The first draft returned the summary from `getMessages` as a system message; the first bullet below and §13 record why it moved to `loadMessages` and became a user message.)_ It also fills a gap: n8n's earlier memory-server nodes, Zep and Motorhead, offered server-side summaries but are now deprecated and hidden from the node panel.
 
 **Friction points, with fixes:**
 

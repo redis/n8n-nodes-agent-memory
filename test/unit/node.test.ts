@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IHttpRequestOptions, INode, ISupplyDataFunctions } from 'n8n-workflow';
-import { RedisAgentMemoryChatMemory } from '../../nodes/RedisAgentMemoryChatMemory/RedisAgentMemoryChatMemory.node';
+import { RedisAgentChatMemory } from '../../nodes/RedisAgentChatMemory/RedisAgentChatMemory.node';
 import { NOT_FOUND_ERROR_TYPE } from '../../nodes/shared/agentMemoryRequest';
 
 /** A LangChain message, as far as these tests read it. */
@@ -27,7 +27,7 @@ const STORE_URL = 'https://memory.example.com/iris/data/v1/agent-memory/stores/s
 const NODE: INode = {
 	id: 'memory-node',
 	name: 'Redis Agent Memory',
-	type: '@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory',
+	type: '@redis/n8n-nodes-agent-memory.redisAgentChatMemory',
 	typeVersion: 1,
 	position: [0, 0],
 	parameters: {},
@@ -53,7 +53,7 @@ function context({ parameters = {}, credentials = {}, respond = () => ({}) }: Se
 	const requests: Array<{ credentialType: string; options: IHttpRequestOptions }> = [];
 	const params: Record<string, unknown> = {
 		sessionId: 's-1',
-		actorId: 'user-1',
+		ownerId: 'user-1',
 		options: {},
 		...parameters,
 	};
@@ -83,11 +83,11 @@ function context({ parameters = {}, credentials = {}, respond = () => ({}) }: Se
 
 async function supply(setup: Setup = {}) {
 	const { ctx, requests } = context(setup);
-	const { response } = await new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0);
+	const { response } = await new RedisAgentChatMemory().supplyData.call(ctx, 0);
 	return { memory: response as SuppliedMemory, requests };
 }
 
-describe('RedisAgentMemoryChatMemory.supplyData', () => {
+describe('RedisAgentChatMemory.supplyData', () => {
 	it('loads the session through the credential, with a clean store URL', async () => {
 		const { memory, requests } = await supply({
 			respond: () => ({
@@ -212,7 +212,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 			'Set a session ID, for example from the chat trigger output',
 		],
 		[
-			'actorId',
+			'ownerId',
 			"'User ID' is empty. Set the ID of the user this conversation belongs to.",
 			'Set the ID of the user this conversation belongs to',
 		],
@@ -223,7 +223,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		async (name, message, description) => {
 			const { ctx } = context({ parameters: { [name]: '  ' } });
 
-			await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toMatchObject({
+			await expect(new RedisAgentChatMemory().supplyData.call(ctx, 0)).rejects.toMatchObject({
 				name: 'NodeOperationError',
 				message,
 				description,
@@ -235,7 +235,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 	it.each(EMPTY_ID_ERRORS)('rejects a missing %s with its own message', async (name, message) => {
 		const { ctx } = context({ parameters: { [name]: undefined } });
 
-		await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
+		await expect(new RedisAgentChatMemory().supplyData.call(ctx, 0)).rejects.toThrow(message);
 	});
 
 	describe('Context Window Length', () => {
@@ -274,7 +274,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 		it.each([[0], ['abc'], [-1], [1.5]])('rejects %j before any request', async (windowSize) => {
 			const { ctx, requests } = context({ parameters: { options: { windowSize } } });
 
-			await expect(new RedisAgentMemoryChatMemory().supplyData.call(ctx, 0)).rejects.toMatchObject({
+			await expect(new RedisAgentChatMemory().supplyData.call(ctx, 0)).rejects.toMatchObject({
 				name: 'NodeOperationError',
 				message: "'Context Window Length' must be a whole number of 1 or more",
 				context: { itemIndex: 0 },
@@ -362,7 +362,7 @@ describe('RedisAgentMemoryChatMemory.supplyData', () => {
 	});
 
 	it('accepts numeric session and user IDs', async () => {
-		const { memory, requests } = await supply({ parameters: { sessionId: 12345, actorId: 678 } });
+		const { memory, requests } = await supply({ parameters: { sessionId: 12345, ownerId: 678 } });
 
 		await memory.saveContext({ input: 'Hi' }, { output: 'Hello' });
 

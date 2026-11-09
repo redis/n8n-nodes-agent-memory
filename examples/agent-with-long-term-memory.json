@@ -93,13 +93,13 @@
     {
       "parameters": {
         "sessionId": "={{ $json.sessionId }}",
-        "actorId": "={{ $json.userId }}",
+        "ownerId": "={{ $json.userId }}",
         "recallLongTermMemories": true,
         "options": {}
       },
       "id": "memory",
       "name": "Redis Agent Chat Memory",
-      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
       "typeVersion": 1,
       "position": [
         540,

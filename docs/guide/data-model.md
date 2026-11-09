@@ -4,7 +4,7 @@ Three identifiers decide who sees what. Get them right and the rest of the node 
 
 ## User ID
 
-Every long-term memory has an owner, and every search is scoped to one owner. The **User ID** parameter (called `actorId` on the chat memory node and `ownerId` on the action node) is that owner.
+Every long-term memory has an owner, and every search is scoped to one owner. The **User ID** parameter (`ownerId` in a workflow's JSON, on both nodes) is that owner.
 
 - On the chat memory node, the User ID is the user the conversation belongs to. Facts the server extracts from it are owned by this user.
 - On **Search**, only this user's memories are searched. On **Create**, the memory belongs to this user.

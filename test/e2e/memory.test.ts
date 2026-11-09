@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { SUMMARY_VIEW_HEADING } from '../../nodes/RedisAgentMemoryChatMemory/memory';
+import { SUMMARY_VIEW_HEADING } from '../../nodes/RedisAgentChatMemory/memory';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
 import { agentMemoryConfig, runPrefix, skipReason, summaryViewTests } from '../support/env';
 import {

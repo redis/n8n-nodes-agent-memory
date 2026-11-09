@@ -9,7 +9,7 @@ import {
 	SUMMARY_VIEW_MESSAGE_ID,
 	SummaryAwareWindowedChatMemory,
 	type AgentMemoryRequest,
-} from '../../nodes/RedisAgentMemoryChatMemory/memory';
+} from '../../nodes/RedisAgentChatMemory/memory';
 
 type Call = Parameters<AgentMemoryRequest>[0];
 
@@ -414,7 +414,7 @@ describe('AgentMemoryChatHistory with Verify Session Owner', () => {
 	const NODE: INode = {
 		id: 'memory-node',
 		name: 'Redis Agent Chat Memory',
-		type: '@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory',
+		type: '@redis/n8n-nodes-agent-memory.redisAgentChatMemory',
 		typeVersion: 1,
 		position: [0, 0],
 		parameters: {},

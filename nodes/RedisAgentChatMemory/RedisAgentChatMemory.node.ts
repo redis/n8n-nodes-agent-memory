@@ -39,10 +39,10 @@ function windowSizeFrom(value: unknown, node: INode, itemIndex: number): number 
 	return windowSize;
 }
 
-export class RedisAgentMemoryChatMemory implements INodeType {
+export class RedisAgentChatMemory implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Redis Agent Chat Memory',
-		name: 'redisAgentMemoryChatMemory',
+		name: 'redisAgentChatMemory',
 		icon: { light: 'file:../../icons/memory.svg', dark: 'file:../../icons/memory.dark.svg' },
 		group: ['transform'],
 		version: [1],
@@ -90,7 +90,7 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 			},
 			{
 				displayName: 'User ID',
-				name: 'actorId',
+				name: 'ownerId',
 				type: 'string',
 				required: true,
 				default: '',
@@ -198,7 +198,7 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 		// Expressions can resolve to a number (such as a Telegram chat ID) or to
 		// undefined (when the input has no such field), so coerce before trimming.
 		const sessionId = String(this.getNodeParameter('sessionId', itemIndex) ?? '').trim();
-		const actorId = String(this.getNodeParameter('actorId', itemIndex) ?? '').trim();
+		const ownerId = String(this.getNodeParameter('ownerId', itemIndex) ?? '').trim();
 		const recall = this.getNodeParameter('recallLongTermMemories', itemIndex, false) as boolean;
 		const options = this.getNodeParameter('options', itemIndex, {}) as MemoryOptions;
 		const node = this.getNode();
@@ -213,7 +213,7 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 				{ itemIndex, description: 'Set a session ID, for example from the chat trigger output' },
 			);
 		}
-		if (!actorId) {
+		if (!ownerId) {
 			throw new NodeOperationError(
 				node,
 				"'User ID' is empty. Set the ID of the user this conversation belongs to.",
@@ -226,7 +226,9 @@ export class RedisAgentMemoryChatMemory implements INodeType {
 
 		const history = new AgentMemoryChatHistory({
 			sessionId,
-			actorId,
+			// The owner of the session and of the memories extracted from it; the
+			// server records it as the actor of every event the node appends.
+			actorId: ownerId,
 			namespaceId: options.namespaceId?.trim() || undefined,
 			verifyOwner: options.verifyOwner ?? false,
 			node,

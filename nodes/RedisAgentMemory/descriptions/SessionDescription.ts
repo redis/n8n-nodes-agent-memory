@@ -133,7 +133,7 @@ export const sessionFields: INodeProperties[] = [
 	// ----- addEvent -----
 	{
 		displayName: 'User ID',
-		name: 'actorId',
+		name: 'ownerId',
 		type: 'string',
 		required: true,
 		default: '',
