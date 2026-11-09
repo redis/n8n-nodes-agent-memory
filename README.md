@@ -6,17 +6,18 @@ Memory for n8n AI Agents, backed by [Redis Agent Memory](https://redis.io/docs/l
 [![E2E](https://github.com/redis/n8n-nodes-agent-memory/actions/workflows/e2e.yml/badge.svg?branch=main)](https://github.com/redis/n8n-nodes-agent-memory/actions/workflows/e2e.yml)
 [![Coverage](https://codecov.io/gh/redis/n8n-nodes-agent-memory/branch/main/graph/badge.svg)](https://codecov.io/gh/redis/n8n-nodes-agent-memory)
 [![npm version](https://img.shields.io/npm/v/%40redis%2Fn8n-nodes-agent-memory?logo=npm&logoColor=white)](https://www.npmjs.com/package/@redis/n8n-nodes-agent-memory)
-[![n8n community node](https://img.shields.io/badge/n8n-community%20node-EA4B71?logo=n8n&logoColor=white)](https://docs.n8n.io/integrations/community-nodes/)
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Prettier](https://img.shields.io/badge/code%20style-prettier-F7B93E?logo=prettier&logoColor=white)](https://prettier.io/)
 [![npm downloads](https://img.shields.io/npm/dm/%40redis%2Fn8n-nodes-agent-memory?label=downloads%2Fmonth)](https://www.npmjs.com/package/@redis/n8n-nodes-agent-memory)
-[![Docs](https://img.shields.io/badge/docs-Redis%20Agent%20Memory-DC382D?logo=redis&logoColor=white)](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 [![Discord](https://img.shields.io/discord/697882427875393627.svg?style=social&logo=discord)](https://discord.gg/redis)
-[![Twitch](https://img.shields.io/twitch/status/redisinc?style=social)](https://www.twitch.tv/redisinc)
-[![YouTube](https://img.shields.io/youtube/channel/views/UCD78lHSwYqMlyetR0_P4Vig?style=social)](https://www.youtube.com/redisinc)
+[![YouTube](https://img.shields.io/badge/YouTube-redisinc-red?style=social&logo=youtube)](https://www.youtube.com/redisinc)
 [![Twitter](https://img.shields.io/twitter/follow/redisinc?style=social)](https://twitter.com/redisinc)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-redisinc-blue?style=social&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iIzBBNjZDMiIgZD0iTTIwLjQ0NyAyMC40NTJoLTMuNTU0di01LjU2OWMwLTEuMzI4LS4wMjctMy4wMzctMS44NTItMy4wMzctMS44NTMgMC0yLjEzNiAxLjQ0NS0yLjEzNiAyLjkzOXY1LjY2N0g5LjM1MVY5aDMuNDE0djEuNTYxaC4wNDZjLjQ3Ny0uOSAxLjYzNy0xLjg1IDMuMzctMS44NSAzLjYwMSAwIDQuMjY3IDIuMzcgNC4yNjcgNS40NTV2Ni4yODZ6TTUuMzM3IDcuNDMzYy0xLjE0NCAwLTIuMDYzLS45MjYtMi4wNjMtMi4wNjUgMC0xLjEzOC45Mi0yLjA2MyAyLjA2My0yLjA2MyAxLjE0IDAgMi4wNjQuOTI1IDIuMDY0IDIuMDYzIDAgMS4xMzktLjkyNSAyLjA2NS0yLjA2NCAyLjA2NXptMS43ODIgMTMuMDE5SDMuNTU1VjloMy41NjR2MTEuNDUyek0yMi4yMjUgMEgxLjc3MUMuNzkyIDAgMCAuNzc0IDAgMS43Mjl2MjAuNTQyQzAgMjMuMjI3Ljc5MiAyNCAxLjc3MSAyNGgyMC40NTFDMjMuMiAyNCAyNCAyMy4yMjcgMjQgMjIuMjcxVjEuNzI5QzI0IC43NzQgMjMuMiAwIDIyLjIyMiAwaC4wMDN6Ii8%2BPC9zdmc%2B)](https://www.linkedin.com/company/redisinc/)
+[![Instagram](https://img.shields.io/badge/Instagram-redisinc-blue?style=social&logo=instagram)](https://www.instagram.com/redisinc/)
+
+[![n8n community node](https://img.shields.io/badge/n8n-community%20node-EA4B71?logo=n8n&logoColor=white)](https://docs.n8n.io/integrations/community-nodes/)
+[![Docs](https://img.shields.io/badge/docs-Redis%20Agent%20Memory-DC382D?logo=redis&logoColor=white)](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/)
+[![Guide](https://img.shields.io/badge/mkdocs-guide-526CFE?logo=materialformkdocs&logoColor=white)](https://redis.github.io/n8n-nodes-agent-memory/)
 
 ### Features
 
@@ -37,7 +38,7 @@ Memory for n8n AI Agents, backed by [Redis Agent Memory](https://redis.io/docs/l
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
 
-> The package ships two nodes: **Redis Agent Chat Memory** (memory sub-node) and **Redis Agent Memory** (action node, listed as **Redis Agent Memory Tool** in the AI Agent's Tool picker). The badge above shows the version on npm.
+> The package adds three entries to n8n's node picker: **Redis Agent Chat Memory** (memory sub-node), **Redis Agent Memory** (action node) and **Redis Agent Memory Tool** (the same action node, in the AI Agent's Tool picker). The badge above shows the version on npm.
 
 [Installation](#installation) · [Nodes](#nodes) · [Credentials](#credentials) · [Compatibility](#compatibility) · [Usage](#usage) · [Development](#development) · [Resources](#resources) · [Contributing](#contributing) · [Security](#security)
 
@@ -46,6 +47,16 @@ Memory for n8n AI Agents, backed by [Redis Agent Memory](https://redis.io/docs/l
 Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation.
 
 ## Nodes
+
+Installing the package adds three entries to n8n's node picker. Two of them are the same node shown in two places.
+
+| Shown in n8n as | Kind | Where you find it | Who runs it |
+|---|---|---|---|
+| **Redis Agent Chat Memory** | memory sub-node | the AI Agent's **Memory** input (AI → Memory → Other memories) | the AI Agent, on every turn: it loads the history before the model runs and saves the turn after |
+| **Redis Agent Memory** | action node | the main node list, wired into the workflow like any other node | the workflow, one operation per execution |
+| **Redis Agent Memory Tool** | tool sub-node | the AI Agent's **Tool** input | the model, when it decides a call is needed |
+
+**Redis Agent Memory** and **Redis Agent Memory Tool** are one node: n8n lists an action node that is usable as a tool under both names. **Chat Memory Manager**, mentioned below, is n8n's own node and not part of this package.
 
 ### Redis Agent Chat Memory (memory sub-node)
 
@@ -71,11 +82,11 @@ Connects to the **Memory** input of an AI Agent.
 
 **Context window.** The history is trimmed in up to three places. The server keeps the recent turns of a session and folds older ones into the summary. The node then sends the model the last **Context Window Length** turns of what the server kept, preceded by the summary. The AI Agent may trim once more, by tokens, if you set its *Max Tokens From Memory*. The server is the main control: a turn it has retained but the summary does not cover yet is sent only if it falls inside the node's window. So keep **Context Window Length** at least as high as the number of turns your store retains before summarizing. The default of 50 is chosen for that; lower it only if your store retains fewer turns.
 
-**Chat Memory Manager.** *Get Many Messages* and *Insert Messages* work. *Insert Messages* with *Override All Messages* replaces the session: the summary is dropped and the new messages are extracted as new content. *Delete Messages* with *All Messages* deletes the session. *Delete Messages* with *Last N* is not supported: n8n implements it by deleting the session and re-inserting the kept turns through this node, which drops the summary and may extract the same facts again. The kept turns also get new event IDs, their `actorId` becomes the user of the deleting workflow, and that user becomes the session's owner. To trim a session, use the action node's **Session → Delete Event**; to correct or remove what was learned, use **Long-Term Memory → Search** and **Delete**.
+**n8n's Chat Memory Manager node.** *Get Many Messages* and *Insert Messages* work. *Insert Messages* with *Override All Messages* replaces the session: the summary is dropped and the new messages are extracted as new content. *Delete Messages* with *All Messages* deletes the session. *Delete Messages* with *Last N* is not supported: n8n implements it by deleting the session and re-inserting the kept turns through this node, which drops the summary and may extract the same facts again. The kept turns also get new event IDs, their `actorId` becomes the user of the deleting workflow, and that user becomes the session's owner. To trim a session, use the action node's **Session → Delete Event**; to correct or remove what was learned, use **Long-Term Memory → Search** and **Delete**.
 
-### Redis Agent Memory (action node) and Redis Agent Memory Tool
+### Redis Agent Memory (action node) and Redis Agent Memory Tool (tool sub-node)
 
-One node with two faces. In the node list it is **Redis Agent Memory**, an action node that manages what the memory sub-node writes. In an AI Agent's Tool picker n8n lists the same node as **Redis Agent Memory Tool**, and there it lets the agent search and save memories on purpose. Each operation is one REST call on the credential's store.
+One node with two faces. In the node list it is **Redis Agent Memory**, an action node the workflow runs to manage what the memory sub-node writes. In an AI Agent's Tool picker n8n lists the same node as **Redis Agent Memory Tool**, a tool sub-node the model calls when it decides to search or save a memory. Each operation is one REST call on the credential's store.
 
 | Resource | Operations |
 |---|---|
@@ -118,9 +129,20 @@ The credential test calls the store health endpoint.
 4. Chat. Recent turns are replayed to the model, older turns are summarized, and facts about the user accumulate in long-term memory.
 5. To bring those facts back in later conversations, either turn on **Recall Long-Term Memories** on the memory sub-node (every turn, no wiring), or attach a **Redis Agent Memory Tool** set to Long-Term Memory → Search (the agent decides when to look). Both can be combined.
 
-### Example workflow
+### Example workflows
 
-[`examples/agent-with-long-term-memory.json`](examples/agent-with-long-term-memory.json) is a workflow you can import: a Chat Trigger, an AI Agent with an OpenAI model, **Redis Agent Chat Memory** with *Recall Long-Term Memories* on, and two **Redis Agent Memory Tools**, *Search memories* and *Save memory*. Import it, select your Redis Agent Memory and OpenAI credentials, and chat: "I'm vegetarian and I live in Sofia." Then start a new chat, which is a new session, and ask "What should I cook tonight?" The answer uses what you said in the first conversation: the agent saved it with *Save memory*, the server also extracts such facts from the conversation on its own, and the memory node recalled it for the new turn. The example pins the User ID to `demo-user` in an Edit Fields node; in your workflow, take it from the authenticated trigger.
+The workflows in [`examples/`](examples/) can be imported into n8n. Select your Redis Agent Memory credential (and OpenAI, where an agent is involved) on the nodes that need one; each has a sticky note with steps to try. They were chosen for the gaps n8n users ask about most: resetting and expiring sessions, sharing memory between agents without leaks, tracing and correcting what was learned, hand-off notes and digests, and importing history.
+
+| Workflow | What it shows |
+|---|---|
+| [`agent-with-long-term-memory.json`](examples/agent-with-long-term-memory.json) | The starting point: a Chat Trigger, an AI Agent, **Redis Agent Chat Memory** with *Recall Long-Term Memories* on, and two **Redis Agent Memory Tools**, *Search memories* and *Save memory*. Say "I'm vegetarian and I live in Sofia", start a new chat, ask "What should I cook tonight?". |
+| [`session-lifecycle.json`](examples/session-lifecycle.json) | `/reset` deletes the current session, `/forget me` deletes every session and long-term memory of the user, and a nightly Schedule Trigger deletes sessions idle for 30 days. Session → Get Many and Delete, Long-Term Memory → Get Many and Delete. |
+| [`shared-memory-across-agents.json`](examples/shared-memory-across-agents.json) | A sales agent and a support agent share one namespace, so what the customer tells one the other knows, while the User ID keeps customers apart. Namespace → Create, the chat memory's *Namespace ID* option, and tools scoped to the namespace. |
+| [`handoff-packet-and-weekly-digest.json`](examples/handoff-packet-and-weekly-digest.json) | A summary view grouped by user. A webhook refreshes one customer's briefing and returns it for a hand-off note; a weekly schedule refreshes every briefing and composes a digest. Summary View → Create, Refresh and Get Result. |
+| [`trace-and-correct-a-memory.json`](examples/trace-and-correct-a-memory.json) | Three webhooks for operators: trace a memory to the exact messages it was extracted from (Search with *Include Sources*, Session → Get), rewrite the memory closest to a query (Search, Update), and forget a whole thread (Session → Get Many, Session → Delete, then Get Many by Session ID → Delete). |
+| [`backfill-history.json`](examples/backfill-history.json) | Import past conversations as session events with their original timestamps (Session → Add Event) and known facts as memories with topics (Long-Term Memory → Create), then search what the server extracted. |
+
+The examples use a demo User ID (a Set node, a webhook body or sample rows); in your workflow, take it from the authenticated trigger.
 
 ## Development
 
@@ -150,6 +172,7 @@ Notes:
 
 ## Resources
 
+- [Guide to this node](https://redis.github.io/n8n-nodes-agent-memory/): installation, the three nodes, summary views, memory sources, every operation, and the example workflows explained
 - [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
 - [Redis Agent Memory documentation](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/)
 - [Agent Memory REST API reference](https://redis.io/docs/latest/develop/ai/context-engine/agent-memory/api-reference/)

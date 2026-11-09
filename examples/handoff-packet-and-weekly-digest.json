@@ -1,0 +1,657 @@
+{
+  "id": "agentMemorySummaryViews",
+  "name": "Hand-off packet and weekly digest with summary views (Redis Agent Memory)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Human-readable summaries, on demand\n\nThe best bot-to-human hand-off templates on n8n.io still have the human type the summary, and \"what did the agent learn this week\" digests are built from dozens of nodes. A **summary view** is a standing summary the server keeps over long-term memories, one per user, so both become a few nodes.\n\n**Set up once** creates the view `customer-briefing`, grouped by user, refreshed on demand.\n\n**Hand-off packet**: `POST /webhook/handoff` with `{ \"userId\": \"demo-user\" }` refreshes that user's briefing, waits for it, and answers with the text, ready for a Zendesk or HubSpot note.\n\n**Weekly digest**: every Monday, refresh every briefing, then read one per known user and compose a Markdown digest. Connect Slack or Gmail after **Weekly digest**.\n\nTry it:\n1. Select your **Redis Agent Memory API** credential on every Redis node.\n2. Run **Set up once**.\n3. Chat with any agent example in this folder as `demo-user`.\n4. Open **Respond with the packet** and choose **Execute step**. **Escalation request** carries a pinned sample request for `demo-user` (a ticket ID and a reason too, which the flow ignores), so the hand-off branch runs without curl. Pinned data applies to editor runs only; a real `POST /webhook/handoff` is used as is.\n\nSummary views must be enabled on the store. The view is looked up by name so the example runs without pasting IDs; in production the **View** field offers the store's views in a list.",
+        "height": 760,
+        "width": 480
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        -360
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "setup-trigger",
+      "name": "Set up once",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "summaryView",
+        "operation": "create",
+        "name": "customer-briefing",
+        "groupBy": [
+          "ownerId"
+        ],
+        "outputFormat": "TEXT",
+        "instructions": "Write a briefing for a human agent taking over this customer: who they are, their preferences, open issues and anything they asked for. Plain prose, under 150 words. Say so if little is known.",
+        "refreshMode": "MANUAL",
+        "additionalFields": {}
+      },
+      "id": "create-view",
+      "name": "Create the briefing view",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "handoff",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "handoff-webhook",
+      "name": "Escalation request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        0
+      ],
+      "webhookId": "8d3a1e5c-4b8f-4a0d-c3e9-1f2a4b5c6d03"
+    },
+    {
+      "parameters": {
+        "resource": "summaryView",
+        "operation": "getAll",
+        "returnAll": true
+      },
+      "id": "find-views",
+      "name": "Find views",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "by-name",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "customer-briefing",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "pick-view",
+      "name": "Pick customer-briefing",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "summaryView",
+        "operation": "refresh",
+        "viewId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.viewId }}"
+        },
+        "target": "PARTITION",
+        "group": {
+          "ownerId": "={{ $('Escalation request').item.json.body.userId }}"
+        },
+        "waitForResult": true,
+        "maxWaitSeconds": 90
+      },
+      "id": "refresh-briefing",
+      "name": "Refresh this customer's briefing",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p-user",
+              "name": "userId",
+              "value": "={{ $('Escalation request').item.json.body.userId }}",
+              "type": "string"
+            },
+            {
+              "id": "p-briefing",
+              "name": "briefing",
+              "value": "={{ $json.text ?? 'Nothing is known about this customer yet.' }}",
+              "type": "string"
+            },
+            {
+              "id": "p-status",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "p-count",
+              "name": "memoriesSummarized",
+              "value": "={{ $json.summarizedMemoryCount ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "p-computed",
+              "name": "computedAt",
+              "value": "={{ $json.computedAt ?? '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "handoff-packet",
+      "name": "Hand-off packet",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      },
+      "id": "respond-packet",
+      "name": "Respond with the packet",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "weekly-trigger",
+      "name": "Every Monday at 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "summaryView",
+        "operation": "getAll",
+        "returnAll": true
+      },
+      "id": "find-views-weekly",
+      "name": "Find views (weekly)",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "by-name-weekly",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "customer-briefing",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "pick-view-weekly",
+      "name": "Pick customer-briefing (weekly)",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "summaryView",
+        "operation": "refresh",
+        "viewId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.viewId }}"
+        },
+        "target": "FULL"
+      },
+      "id": "refresh-all",
+      "name": "Refresh every briefing",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        480,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {}
+      },
+      "id": "list-sessions",
+      "name": "List sessions",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-owner",
+              "leftValue": "={{ $json.ownerId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "known-users",
+      "name": "Known users only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "removeDuplicateInputItems",
+        "compare": "selectedFields",
+        "fieldsToCompare": "ownerId",
+        "options": {}
+      },
+      "id": "one-per-user",
+      "name": "One item per user",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "summaryView",
+        "operation": "getResult",
+        "viewId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Pick customer-briefing (weekly)').first().json.viewId }}"
+        },
+        "group": {
+          "ownerId": "={{ $json.ownerId }}"
+        },
+        "waitForResult": true,
+        "maxWaitSeconds": 120,
+        "options": {}
+      },
+      "id": "read-briefing",
+      "name": "Read the user's briefing",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d-user",
+              "name": "userId",
+              "value": "={{ $('One item per user').item.json.ownerId }}",
+              "type": "string"
+            },
+            {
+              "id": "d-text",
+              "name": "briefing",
+              "value": "={{ $json.text ?? '(nothing learned yet)' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "digest-line",
+      "name": "Digest line",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "collect-lines",
+      "name": "Collect all lines",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "digest",
+              "name": "digest",
+              "value": "=# What the agent learned this week\n\n{{ $json.data.map(r => '**' + r.userId + '**\\n' + r.briefing).join('\\n\\n') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "weekly-digest",
+      "name": "Weekly digest",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2160,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Set up once": {
+      "main": [
+        [
+          {
+            "node": "Create the briefing view",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation request": {
+      "main": [
+        [
+          {
+            "node": "Find views",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find views": {
+      "main": [
+        [
+          {
+            "node": "Pick customer-briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick customer-briefing": {
+      "main": [
+        [
+          {
+            "node": "Refresh this customer's briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh this customer's briefing": {
+      "main": [
+        [
+          {
+            "node": "Hand-off packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hand-off packet": {
+      "main": [
+        [
+          {
+            "node": "Respond with the packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Monday at 08:00": {
+      "main": [
+        [
+          {
+            "node": "Find views (weekly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find views (weekly)": {
+      "main": [
+        [
+          {
+            "node": "Pick customer-briefing (weekly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick customer-briefing (weekly)": {
+      "main": [
+        [
+          {
+            "node": "Refresh every briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh every briefing": {
+      "main": [
+        [
+          {
+            "node": "List sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List sessions": {
+      "main": [
+        [
+          {
+            "node": "Known users only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Known users only": {
+      "main": [
+        [
+          {
+            "node": "One item per user",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per user": {
+      "main": [
+        [
+          {
+            "node": "Read the user's briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the user's briefing": {
+      "main": [
+        [
+          {
+            "node": "Digest line",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Digest line": {
+      "main": [
+        [
+          {
+            "node": "Collect all lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect all lines": {
+      "main": [
+        [
+          {
+            "node": "Weekly digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {
+    "Escalation request": [
+      {
+        "json": {
+          "headers": {
+            "host": "your-n8n",
+            "content-type": "application/json",
+            "user-agent": "helpdesk-escalations/1.0"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "userId": "demo-user",
+            "ticketId": "HD-48213",
+            "channel": "chat",
+            "reason": "Customer asked for a human agent"
+          },
+          "webhookUrl": "https://your-n8n/webhook/handoff",
+          "executionMode": "test"
+        }
+      }
+    ]
+  }
+}

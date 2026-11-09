@@ -5,6 +5,14 @@ on:
   push:
     branches:
       - main
+  # The Publish workflow runs this on the release tag before it publishes.
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to check out; the caller’s ref when empty'
+        required: false
+        type: string
+        default: ''
 
 # Cancel in-progress runs for the same branch/PR to avoid wasting CI minutes.
 concurrency:
@@ -17,6 +25,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

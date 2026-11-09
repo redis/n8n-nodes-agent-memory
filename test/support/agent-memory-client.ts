@@ -1,5 +1,5 @@
 import { sleep } from 'n8n-workflow';
-import type { AgentMemorySessionResponse } from '../../nodes/RedisAgentMemoryChatMemory/memory';
+import type { AgentMemorySessionResponse } from '../../nodes/RedisAgentChatMemory/memory';
 import {
 	AGENT_MEMORY_API_PREFIX,
 	NOT_FOUND_ERROR_TYPE,

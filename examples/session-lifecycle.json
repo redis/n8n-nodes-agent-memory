@@ -1,0 +1,665 @@
+{
+  "id": "agentMemorySessionLifecycle",
+  "name": "Session lifecycle: /reset, /forget me, and idle clean-up (Redis Agent Memory)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Session lifecycle\n\nThe most-viewed memory threads on the n8n forum ask for three things: reset a conversation, let a user delete everything, and expire idle sessions. This workflow does all three with the **Redis Agent Memory** action node.\n\n**Chat commands**, routed before the agent runs:\n- `/reset` deletes the current session. History and its server-side summary go; long-term facts stay.\n- `/forget me` deletes every session and every long-term memory of the user.\n- Anything else goes to the agent as usual.\n\n**Nightly clean-up**: the Schedule Trigger lists all sessions and deletes those not updated for 30 days.\n\nTry it:\n1. Select your **Redis Agent Memory API** and **OpenAI** credentials.\n2. Chat: *I'm Ana and I prefer short answers.* Then `/reset`, then *What do you know about me?* The fact survives the reset.\n3. Send `/forget me`, then ask again. Nothing is left.\n\n**Identify the user** pins the User ID to `demo-user`. In production take it from the authenticated trigger, never from the message.",
+        "height": 640,
+        "width": 460
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "loadPreviousSession": "memory"
+        }
+      },
+      "id": "chat-trigger",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        -240,
+        0
+      ],
+      "webhookId": "5b1e9c3a-2f6d-4e8b-a1c7-9d0e2f3a4b01"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user-id",
+              "name": "userId",
+              "value": "demo-user",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "identify-user",
+      "name": "Identify the user",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-reset",
+                    "leftValue": "={{ $json.chatInput.trim().toLowerCase() }}",
+                    "rightValue": "/reset",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reset"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-forget",
+                    "leftValue": "={{ $json.chatInput.trim().toLowerCase() }}",
+                    "rightValue": "/forget me",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "forget me"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "chat"
+        }
+      },
+      "id": "route-commands",
+      "name": "Route commands",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "delete",
+        "sessionId": "={{ $json.sessionId }}"
+      },
+      "id": "delete-this-session",
+      "name": "Delete this session",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        520,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "reply-reset",
+              "name": "output",
+              "value": "Conversation cleared. I still remember what you told me about yourself; send /forget me to delete that as well.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "reply-session-cleared",
+      "name": "Reply: session cleared",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        760,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "ownerId": "={{ $json.userId }}"
+        }
+      },
+      "id": "list-my-sessions",
+      "name": "List my sessions",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        520,
+        -60
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-session",
+              "leftValue": "={{ $json.sessionId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-a-session",
+      "name": "Any sessions?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        760,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "delete",
+        "sessionId": "={{ $json.sessionId }}"
+      },
+      "id": "delete-session",
+      "name": "Delete session",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "ownerId": "={{ $('Identify the user').first().json.userId }}"
+        }
+      },
+      "id": "list-my-memories",
+      "name": "List my memories",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        -60
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-memory",
+              "leftValue": "={{ $json.memoryId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-a-memory",
+      "name": "Any memories?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1480,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "delete",
+        "memoryId": "={{ $json.memoryId }}"
+      },
+      "id": "delete-memory",
+      "name": "Delete memory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "reply-forgotten",
+              "name": "output",
+              "value": "Done. Your conversations and everything I had learned about you are deleted.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "reply-forgotten",
+      "name": "Reply: forgotten",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1960,
+        -60
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are a helpful assistant with memory. Lasting facts the user tells you (name, preferences, decisions) are remembered across conversations and recalled for you at the start of each turn. The user can type /reset to clear this conversation or /forget me to delete everything; mention these only if asked how to delete data."
+        }
+      },
+      "id": "agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        520,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "sessionId": "={{ $json.sessionId }}",
+        "ownerId": "={{ $json.userId }}",
+        "recallLongTermMemories": true,
+        "options": {}
+      },
+      "id": "memory",
+      "name": "Redis Agent Chat Memory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
+      "typeVersion": 1,
+      "position": [
+        640,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "id": "every-night",
+      "name": "Every night at 03:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {}
+      },
+      "id": "list-all-sessions",
+      "name": "List all sessions",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "idle",
+              "leftValue": "={{ $json.updatedAt ?? $json.createdAt }}",
+              "rightValue": "={{ $now.minus({ days: 30 }).toISO() }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "before"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "idle-sessions",
+      "name": "Idle for 30 days",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "delete",
+        "sessionId": "={{ $json.sessionId }}"
+      },
+      "id": "delete-idle-session",
+      "name": "Delete idle session",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        480,
+        720
+      ]
+    }
+  ],
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Identify the user",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify the user": {
+      "main": [
+        [
+          {
+            "node": "Route commands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route commands": {
+      "main": [
+        [
+          {
+            "node": "Delete this session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "List my sessions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete this session": {
+      "main": [
+        [
+          {
+            "node": "Reply: session cleared",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List my sessions": {
+      "main": [
+        [
+          {
+            "node": "Any sessions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any sessions?": {
+      "main": [
+        [
+          {
+            "node": "Delete session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "List my memories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete session": {
+      "main": [
+        [
+          {
+            "node": "List my memories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List my memories": {
+      "main": [
+        [
+          {
+            "node": "Any memories?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any memories?": {
+      "main": [
+        [
+          {
+            "node": "Delete memory",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply: forgotten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete memory": {
+      "main": [
+        [
+          {
+            "node": "Reply: forgotten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Agent Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "When chat message received",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every night at 03:00": {
+      "main": [
+        [
+          {
+            "node": "List all sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List all sessions": {
+      "main": [
+        [
+          {
+            "node": "Idle for 30 days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idle for 30 days": {
+      "main": [
+        [
+          {
+            "node": "Delete idle session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

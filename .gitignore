@@ -13,3 +13,6 @@ coverage
 
 # Scratch file of auto-changelog during `npm run release`; the GitHub release notes are the changelog
 .auto-changelog.md
+
+# MkDocs build output
+site/

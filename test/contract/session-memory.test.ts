@@ -5,7 +5,7 @@ import {
 	SUMMARY_MESSAGE_ID,
 	SUMMARY_VIEW_MESSAGE_ID,
 	SummaryAwareWindowedChatMemory,
-} from '../../nodes/RedisAgentMemoryChatMemory/memory';
+} from '../../nodes/RedisAgentChatMemory/memory';
 import { NOT_FOUND_ERROR_TYPE } from '../../nodes/shared/agentMemoryRequest';
 import { AgentMemoryTestClient } from '../support/agent-memory-client';
 import {

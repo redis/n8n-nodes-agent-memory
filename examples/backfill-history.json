@@ -1,0 +1,199 @@
+{
+  "id": "agentMemoryBackfill",
+  "name": "Backfill history: import past conversations and known facts (Redis Agent Memory)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Start a new deployment already up to speed\n\n\"How do I import a year of chat history?\" is a recurring n8n forum question. Two paths, both one node each:\n\n**Past conversations → sessions.** Each row (session, user, role, text, timestamp) becomes a session event with its original **Created At**. The server summarizes the sessions and extracts long-term facts from them, exactly as for a live chat.\n\n**Known facts → long-term memories.** CRM fields, notes and profile data go straight in as memories with **Topics**, no extraction wait.\n\nThe two **Code** nodes hold sample rows so the example runs on its own. Replace them with Google Sheets, Postgres, a CSV from *Extract From File*, or your CRM; keep the column names.\n\nTry it:\n1. Select your **Redis Agent Memory API** credential on the three Redis nodes.\n2. Run the workflow. **Wait for extraction** gives the server 90 seconds, then **What is remembered now?** searches the user's memories with their sources: the imported facts, plus what was extracted from the replayed conversations, each pointing at the session it came from.\n3. Chat with any agent example in this folder as `demo-user`: it knows Maria's bakery.",
+        "height": 620,
+        "width": 480
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        -260
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "run-once",
+      "name": "Run once",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sample rows. Replace this node with your data source; keep the column names.\nconst rows = [\n  { sessionId: 'import-2025-03-02', userId: 'demo-user', role: 'USER', text: \"Hi, I'm Maria. I run a small bakery in Lisbon.\", createdAt: '2025-03-02T09:14:00Z' },\n  { sessionId: 'import-2025-03-02', userId: 'demo-user', role: 'ASSISTANT', text: 'Nice to meet you, Maria. How can I help with the bakery?', createdAt: '2025-03-02T09:14:05Z' },\n  { sessionId: 'import-2025-03-02', userId: 'demo-user', role: 'USER', text: 'We are switching to a fully vegan menu next month, so I need supplier suggestions for plant-based butter.', createdAt: '2025-03-02T09:15:10Z' },\n  { sessionId: 'import-2025-03-02', userId: 'demo-user', role: 'ASSISTANT', text: 'Understood: a vegan menu from April. I will look for plant-based butter suppliers that deliver to Lisbon.', createdAt: '2025-03-02T09:15:20Z' },\n  { sessionId: 'import-2025-06-18', userId: 'demo-user', role: 'USER', text: 'Reminder: the bakery is closed on Mondays. Can you help me plan Tuesday deliveries?', createdAt: '2025-06-18T16:40:00Z' },\n  { sessionId: 'import-2025-06-18', userId: 'demo-user', role: 'ASSISTANT', text: 'Noted, closed on Mondays. Let us plan the Tuesday delivery schedule.', createdAt: '2025-06-18T16:40:08Z' },\n];\nreturn rows.map((row) => ({ json: row }));"
+      },
+      "id": "past-conversations",
+      "name": "Past conversations (sample rows)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "session",
+        "operation": "addEvent",
+        "sessionId": "={{ $json.sessionId }}",
+        "ownerId": "={{ $json.userId }}",
+        "role": "={{ $json.role }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "createdAt": "={{ $json.createdAt }}"
+        }
+      },
+      "id": "replay-into-sessions",
+      "name": "Replay into sessions",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        240,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sample facts from a CRM or profile table. Replace with your data source.\nconst facts = [\n  { userId: 'demo-user', text: 'Maria owns a small bakery in Lisbon.', topics: 'business,location' },\n  { userId: 'demo-user', text: 'Maria prefers to be contacted by email, not by phone.', topics: 'contact' },\n  { userId: 'demo-user', text: 'Account manager is Jonas; the account is on the Pro plan since November 2024.', topics: 'account' },\n];\nreturn facts.map((fact) => ({ json: fact }));"
+      },
+      "id": "known-facts",
+      "name": "Known facts (sample rows)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "create",
+        "text": "={{ $json.text }}",
+        "ownerId": "={{ $json.userId }}",
+        "additionalFields": {
+          "topics": "={{ $json.topics }}"
+        }
+      },
+      "id": "write-facts",
+      "name": "Write facts as memories",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        240,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 90,
+        "unit": "seconds"
+      },
+      "id": "wait-for-extraction",
+      "name": "Wait for extraction",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        -120
+      ],
+      "webhookId": "af5c3a7e-6d0b-4c2f-e5ab-3b4c6d7e8f05"
+    },
+    {
+      "parameters": {
+        "resource": "longTermMemory",
+        "operation": "search",
+        "query": "Maria's bakery: menu, opening days and deliveries",
+        "ownerId": "demo-user",
+        "limit": 10,
+        "options": {},
+        "includeSources": true
+      },
+      "id": "what-is-remembered",
+      "name": "What is remembered now?",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -120
+      ],
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Run once": {
+      "main": [
+        [
+          {
+            "node": "Past conversations (sample rows)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Known facts (sample rows)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Past conversations (sample rows)": {
+      "main": [
+        [
+          {
+            "node": "Replay into sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay into sessions": {
+      "main": [
+        [
+          {
+            "node": "Wait for extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Known facts (sample rows)": {
+      "main": [
+        [
+          {
+            "node": "Write facts as memories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for extraction": {
+      "main": [
+        [
+          {
+            "node": "What is remembered now?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

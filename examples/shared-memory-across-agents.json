@@ -1,0 +1,476 @@
+{
+  "id": "agentMemorySharedNamespace",
+  "name": "Shared memory across agents without bleed (Redis Agent Memory)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Two agents, one customer, no bleed\n\nMulti-channel and multi-agent builds (a sales bot and a support bot on the same customer) are among the most-discussed memory problems in the n8n forum: either each agent forgets what the other learned, or one customer's facts leak into another's chat.\n\nHere both agents write to and recall from one **shared namespace** (`customer-facts`), while the **User ID** keeps customers apart inside it. Each agent keeps its own session, so conversation history does not mix.\n\nTry it:\n1. Select your **Redis Agent Memory API** and **OpenAI** credentials.\n2. Click **Set up once** and run it. It creates the namespace.\n3. Open the chat. Say: *sales: We are a team of 12 and our budget is 500 a month.*\n4. Start a new chat and say: *support: Which plan fits us?* The support agent knows the team size and budget it was never told.\n5. Change `userId` in **Identify the customer** to `other-customer` and ask again: nothing is known.\n\nThe namespace is looked up by name on each turn so the example runs without pasting IDs; in production store the namespace ID once (a Set node, a workflow variable) and skip the lookup.",
+        "height": 660,
+        "width": 480
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -340
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "setup-trigger",
+      "name": "Set up once",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "namespace",
+        "operation": "create",
+        "name": "customer-facts",
+        "scope": "SHARED",
+        "additionalFields": {}
+      },
+      "id": "create-namespace",
+      "name": "Create the shared namespace",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        -240,
+        0
+      ],
+      "webhookId": "7c2f0d4b-3a7e-4f9c-b2d8-0e1f3a4b5c02"
+    },
+    {
+      "parameters": {
+        "resource": "namespace",
+        "operation": "getAll",
+        "returnAll": true
+      },
+      "id": "find-namespaces",
+      "name": "Find namespaces",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "by-name",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "customer-facts",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "pick-namespace",
+      "name": "Pick customer-facts",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user-id",
+              "name": "userId",
+              "value": "demo-customer",
+              "type": "string"
+            },
+            {
+              "id": "namespace-id",
+              "name": "namespaceId",
+              "value": "={{ $json.namespaceId }}",
+              "type": "string"
+            },
+            {
+              "id": "session-id",
+              "name": "sessionId",
+              "value": "={{ $('When chat message received').item.json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "chat-input",
+              "name": "chatInput",
+              "value": "={{ $('When chat message received').item.json.chatInput }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "identify-customer",
+      "name": "Identify the customer",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-sales",
+                    "leftValue": "={{ $json.chatInput.trim().toLowerCase() }}",
+                    "rightValue": "sales:",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sales"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "support"
+        }
+      },
+      "id": "which-team",
+      "name": "Which team?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput.replace(/^sales:\\s*/i, '') }}",
+        "options": {
+          "systemMessage": "You are the sales assistant. Facts the customer shares (team size, budget, timeline, requirements) matter to every team: save each one with the Save shared memory tool. Before recommending anything, check the Search shared memories tool for what the customer has already told any team."
+        }
+      },
+      "id": "sales-agent",
+      "name": "Sales agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1000,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput.replace(/^support:\\s*/i, '') }}",
+        "options": {
+          "systemMessage": "You are the support assistant. Before asking the customer for details, check the Search shared memories tool: sales may already know their team size, budget and plan. Save new lasting facts with the Save shared memory tool so other teams see them."
+        }
+      },
+      "id": "support-agent",
+      "name": "Support agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1000,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "sessionId": "=sales-{{ $json.sessionId }}",
+        "ownerId": "={{ $json.userId }}",
+        "recallLongTermMemories": true,
+        "options": {
+          "namespaceId": "={{ $json.namespaceId }}"
+        }
+      },
+      "id": "sales-memory",
+      "name": "Sales memory (shared namespace)",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "sessionId": "=support-{{ $json.sessionId }}",
+        "ownerId": "={{ $json.userId }}",
+        "recallLongTermMemories": true,
+        "options": {
+          "namespaceId": "={{ $json.namespaceId }}"
+        }
+      },
+      "id": "support-memory",
+      "name": "Support memory (shared namespace)",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Search what this customer has told any team (sales or support) in earlier conversations: team size, budget, plan, requirements, open issues.",
+        "resource": "longTermMemory",
+        "operation": "search",
+        "query": "={{ $fromAI('query', 'What to look for in the customer\\'s shared memories', 'string') }}",
+        "ownerId": "={{ $('Identify the customer').item.json.userId }}",
+        "limit": 5,
+        "options": {
+          "namespaceId": "={{ $('Identify the customer').item.json.namespaceId }}"
+        }
+      },
+      "id": "search-shared",
+      "name": "Search shared memories",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryTool",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Remember a lasting fact about this customer so every team sees it: one sentence, such as team size, budget, plan or a requirement.",
+        "resource": "longTermMemory",
+        "operation": "create",
+        "text": "={{ $fromAI('text', 'The fact to remember, in one sentence', 'string') }}",
+        "ownerId": "={{ $('Identify the customer').item.json.userId }}",
+        "additionalFields": {
+          "namespaceId": "={{ $('Identify the customer').item.json.namespaceId }}"
+        }
+      },
+      "id": "save-shared",
+      "name": "Save shared memory",
+      "type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryTool",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        20
+      ]
+    }
+  ],
+  "connections": {
+    "Set up once": {
+      "main": [
+        [
+          {
+            "node": "Create the shared namespace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Find namespaces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find namespaces": {
+      "main": [
+        [
+          {
+            "node": "Pick customer-facts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick customer-facts": {
+      "main": [
+        [
+          {
+            "node": "Identify the customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify the customer": {
+      "main": [
+        [
+          {
+            "node": "Which team?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which team?": {
+      "main": [
+        [
+          {
+            "node": "Sales agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Support agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Sales agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Support agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sales memory (shared namespace)": {
+      "ai_memory": [
+        [
+          {
+            "node": "Sales agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Support memory (shared namespace)": {
+      "ai_memory": [
+        [
+          {
+            "node": "Support agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search shared memories": {
+      "ai_tool": [
+        [
+          {
+            "node": "Sales agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Support agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save shared memory": {
+      "ai_tool": [
+        [
+          {
+            "node": "Sales agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Support agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

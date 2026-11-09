@@ -224,14 +224,14 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 
 	it('adds events to a session, lists it, trims it and deletes it', async () => {
 		const sessionId = `${runPrefix}-action-session`;
-		const actorId = `${runPrefix}-actor-1`;
-		client.track(sessionId, actorId);
+		const userId = `${runPrefix}-user-1`;
+		client.track(sessionId, userId);
 
 		const [first] = await run({
 			resource: 'session',
 			operation: 'addEvent',
 			sessionId,
-			actorId,
+			ownerId: userId,
 			role: 'USER',
 			text: 'Hello',
 			additionalFields: {},
@@ -240,28 +240,29 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 			resource: 'session',
 			operation: 'addEvent',
 			sessionId,
-			actorId,
+			ownerId: userId,
 			role: 'ASSISTANT',
 			text: 'Hi there',
 			additionalFields: {},
 		});
-		expect(first).toMatchObject({ sessionId, actorId, role: 'USER' });
+		// The node sends User ID as the event's actorId; the server makes the first actor the owner.
+		expect(first).toMatchObject({ sessionId, actorId: userId, role: 'USER' });
 		expect(second).toMatchObject({ role: 'ASSISTANT' });
 
 		const [session] = await run({ resource: 'session', operation: 'get', sessionId, options: {} });
-		expect(session.ownerId).toBe(actorId);
+		expect(session.ownerId).toBe(userId);
 		expect(session).not.toHaveProperty('summary');
 		expect(session.events).toEqual([
 			{
 				eventId: first.eventId,
-				actorId,
+				actorId: userId,
 				role: 'USER',
 				text: 'Hello',
 				createdAt: expect.any(String),
 			},
 			{
 				eventId: second.eventId,
-				actorId,
+				actorId: userId,
 				role: 'ASSISTANT',
 				text: 'Hi there',
 				createdAt: expect.any(String),
@@ -284,10 +285,10 @@ describe.skipIf(!agentMemoryConfig)(`Agent Memory action node contract ${skipRea
 			resource: 'session',
 			operation: 'getAll',
 			returnAll: true,
-			filters: { ownerId: actorId },
+			filters: { ownerId: userId },
 		});
 		// Each item carries what the server knows about the session.
-		expect(listed).toContainEqual(expect.objectContaining({ sessionId, ownerId: actorId }));
+		expect(listed).toContainEqual(expect.objectContaining({ sessionId, ownerId: userId }));
 
 		const [trimmed] = await run({
 			resource: 'session',

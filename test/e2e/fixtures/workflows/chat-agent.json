@@ -65,7 +65,7 @@
 		{
 			"id": "node-memory",
 			"name": "Redis Agent Chat Memory",
-			"type": "@redis/n8n-nodes-agent-memory.redisAgentMemoryChatMemory",
+			"type": "@redis/n8n-nodes-agent-memory.redisAgentChatMemory",
 			"typeVersion": 1,
 			"position": [
 				320,
@@ -73,7 +73,7 @@
 			],
 			"parameters": {
 				"sessionId": "={{ $json.sessionId }}",
-				"actorId": "={{ 'user-' + $json.sessionId }}",
+				"ownerId": "={{ 'user-' + $json.sessionId }}",
 				"options": {
 					"windowSize": "={{ $json.windowSize ?? 50 }}"
 				}
