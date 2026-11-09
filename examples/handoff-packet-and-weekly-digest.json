@@ -4,8 +4,8 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Human-readable summaries, on demand\n\nThe best bot-to-human hand-off templates on n8n.io still have the human type the summary, and \"what did the agent learn this week\" digests are built from dozens of nodes. A **summary view** is a standing summary the server keeps over long-term memories, one per user, so both become a few nodes.\n\n**Set up once** creates the view `customer-briefing`, grouped by user, refreshed on demand.\n\n**Hand-off packet**: `POST /webhook/handoff` with `{ \"userId\": \"demo-user\" }` refreshes that user's briefing, waits for it, and answers with the text, ready for a Zendesk or HubSpot note.\n\n**Weekly digest**: every Monday, refresh every briefing, then read one per known user and compose a Markdown digest. Connect Slack or Gmail after **Weekly digest**.\n\nTry it:\n1. Select your **Redis Agent Memory API** credential on every Redis node.\n2. Run **Set up once**.\n3. Chat with any agent example in this folder as `demo-user`, then call the hand-off webhook.\n\nSummary views must be enabled on the store. The view is looked up by name so the example runs without pasting IDs; in production the **View** field offers the store's views in a list.",
-        "height": 680,
+        "content": "## Human-readable summaries, on demand\n\nThe best bot-to-human hand-off templates on n8n.io still have the human type the summary, and \"what did the agent learn this week\" digests are built from dozens of nodes. A **summary view** is a standing summary the server keeps over long-term memories, one per user, so both become a few nodes.\n\n**Set up once** creates the view `customer-briefing`, grouped by user, refreshed on demand.\n\n**Hand-off packet**: `POST /webhook/handoff` with `{ \"userId\": \"demo-user\" }` refreshes that user's briefing, waits for it, and answers with the text, ready for a Zendesk or HubSpot note.\n\n**Weekly digest**: every Monday, refresh every briefing, then read one per known user and compose a Markdown digest. Connect Slack or Gmail after **Weekly digest**.\n\nTry it:\n1. Select your **Redis Agent Memory API** credential on every Redis node.\n2. Run **Set up once**.\n3. Chat with any agent example in this folder as `demo-user`.\n4. Open **Respond with the packet** and choose **Execute step**. **Escalation request** carries a pinned sample request for `demo-user` (a ticket ID and a reason too, which the flow ignores), so the hand-off branch runs without curl. Pinned data applies to editor runs only; a real `POST /webhook/handoff` is used as is.\n\nSummary views must be enabled on the store. The view is looked up by name so the example runs without pasting IDs; in production the **View** field offers the store's views in a list.",
+        "height": 760,
         "width": 480
       },
       "id": "sticky-note",
@@ -631,5 +631,27 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "pinData": {}
+  "pinData": {
+    "Escalation request": [
+      {
+        "json": {
+          "headers": {
+            "host": "your-n8n",
+            "content-type": "application/json",
+            "user-agent": "helpdesk-escalations/1.0"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "userId": "demo-user",
+            "ticketId": "HD-48213",
+            "channel": "chat",
+            "reason": "Customer asked for a human agent"
+          },
+          "webhookUrl": "https://your-n8n/webhook/handoff",
+          "executionMode": "test"
+        }
+      }
+    ]
+  }
 }

@@ -17,7 +17,7 @@ The examples use a demo User ID (`demo-user` in a Set node, a webhook body, or s
 | [Session lifecycle](#session-lifecycle) | `/reset`, "forget me", expire idle sessions | Session → Get Many and Delete, Long-Term Memory → Get Many and Delete |
 | [Shared memory across agents](#shared-memory-across-agents) | Two agents on one customer, no bleed between customers | Namespace → Create, the chat memory's Namespace ID option, namespace-scoped tools |
 | [Hand-off packet and weekly digest](#hand-off-packet-and-weekly-digest) | Human-readable summaries on demand | Summary View → Create, Refresh and Get Result |
-| [Trace, correct and forget](#trace-correct-and-forget) | Audit, corrections, poisoning triage | Search with Include Sources, Get Sources, Session → Get, Update, delete by Session ID |
+| [Trace, correct and forget](#trace-correct-and-forget) | Audit, corrections, poisoning triage | Search with Include Sources, Session → Get, Update, Session → Get Many, delete by Session ID |
 | [Backfill history](#backfill-history) | Import a year of conversations and known facts | Session → Add Event with Created At, Long-Term Memory → Create with topics |
 
 ---
@@ -167,7 +167,19 @@ flowchart LR
 ### Try it
 
 1. Run **Set up once**.
-2. Chat with any agent example in this folder as `demo-user`, then call the hand-off webhook:
+2. Chat with any agent example in this folder as `demo-user`.
+3. Open **Respond with the packet** and choose **Execute step**. **Escalation request** carries a pinned sample request, so the hand-off branch runs in the editor without a client:
+
+    ```json
+    {
+      "userId": "demo-user",
+      "ticketId": "HD-48213",
+      "channel": "chat",
+      "reason": "Customer asked for a human agent"
+    }
+    ```
+
+    Only `userId` is read; the other fields show what a help-desk escalation carries. Pinned data applies to editor runs only. To call the live webhook instead, activate the workflow and send the same body:
 
     ```bash
     curl -X POST https://your-n8n/webhook/handoff \
@@ -195,27 +207,33 @@ Three HTTP endpoints an operator or an admin workflow can call.
 
 ```mermaid
 flowchart LR
-    W1[POST /webhook/memory/trace] --> S[Search<br/>Include Sources] --> G[Get Sources] --> F[Session sources only] --> R[Session → Get<br/>Include Summarized Events] --> E[Evidence report] --> O1[Respond]
-    W2[POST /webhook/memory/correct] --> U[Long-Term Memory → Update] --> O2[Respond]
-    W3[POST /webhook/memory/forget-thread] --> D1[Session → Delete] --> L[Long-Term Memory → Get Many<br/>by Session ID and User ID] --> X{Anything?} -->|yes| D2[Long-Term Memory → Delete] --> O3[Respond: count]
+    W1[POST /webhook/memory/trace] --> S[Search<br/>Include Sources] --> H{Session source?} -->|yes| R[Session → Get<br/>Include Summarized Events] --> E[Evidence report] --> M[Merge] --> O1[Respond]
+    H -->|no| N[No sources] --> M
+    W2[POST /webhook/memory/correct] --> S2[Search<br/>limit 1] --> F2{Found?} -->|yes| U[Long-Term Memory → Update] --> O2[Respond]
+    F2 -->|no| O5[Respond: nothing matched]
+    W3[POST /webhook/memory/forget-thread] --> L1[Session → Get Many<br/>by User ID] --> P[Pick the thread] --> D1[Session → Delete] --> L[Long-Term Memory → Get Many<br/>by Session ID and User ID] --> X{Anything?} -->|yes| D2[Long-Term Memory → Delete] --> O3[Respond: count]
     X -->|no| O4[Respond: 0]
 ```
 
-- **Trace.** `{ "userId": "demo-user", "query": "where does the user live" }`. **Search with sources** finds up to three memories with **Include Sources** on; **Get Sources** lists each memory's sources; **Session sources only** keeps the `SESSION` kind; **Read the session** gets the session with **Include Summarized Events** on, so evidence is found even after the session was summarized; **Evidence report** (Set) pairs each memory with the events whose IDs are in the source's `eventIds`, as `role (time): text` lines; the response lists every memory with its evidence.
-- **Correct.** `{ "memoryId": "…", "text": "The user lives in Madrid." }`. **Rewrite the memory** is Long-Term Memory → Update with the new **Text**; the memory keeps its ID and sources.
-- **Forget a thread.** `{ "userId": "demo-user", "sessionId": "…" }`. **Delete the session**, then **Memories extracted from it** (Get Many with the **Session ID** and **User ID** filters, Return All, *Always Output Data*), **Anything to delete?** (IF) and **Delete memory** for each; the response reports `memoriesDeleted`.
+- **Trace.** `{ "userId": "demo-user", "query": "where does the user live" }`. **Search with sources** finds up to three memories with **Include Sources** on, which puts each memory's `sources` (kind, session, `eventIds`) on the record with no extra request. **Has a session source?** (IF) splits them: with one, **Read the session** gets the session with **Include Summarized Events** on, so evidence is found even after the session was summarized, and **Evidence report** (Set) pairs the memory with the events whose IDs are in `eventIds`, as `role (time): text` lines; without one, **No sources** (Set) reports the memory with a note, since a memory created directly, by a Save tool for instance, has nothing that extracted it. **Collect the report** (Merge) joins both, and the response lists every memory. *Always Output Data* on the search makes an empty match answer too.
+- **Correct.** `{ "userId": "demo-user", "query": "where does the user live", "text": "The user lives in Madrid." }`. **Find the memory** is Search with **Limit** 1 for the user, by `query` or, when there is none, by the new `text` itself, which finds the closest existing fact; **Found one?** (IF) guards it; **Rewrite the memory** is Long-Term Memory → Update with the new **Text**; the memory keeps its ID and sources. No match answers `{ "corrected": false }`.
+- **Forget a thread.** `{ "userId": "demo-user", "sessionId": "…" }`. **The user's sessions** (Session → Get Many by **User ID**), **Collect sessions** (Aggregate) and **Pick the thread** (Set) choose the session: the one named in the request, or the user's most recently updated one when none is. Then **Delete the session**, **Memories extracted from it** (Get Many with the **Session ID** and **User ID** filters, Return All, *Always Output Data*), **Anything to delete?** (IF) and **Delete memory** for each; the response reports `memoriesDeleted`.
 
 ### Try it
 
-Seed memories first by chatting with another example as `demo-user`; extraction takes up to a minute or two. Then:
+Seed memories first by chatting with another example as `demo-user`; extraction takes up to a minute or two. Each webhook carries a pinned sample request for `demo-user`, so the three flows run in the editor without a client:
+
+1. Open **Respond with the report** and choose **Execute step**. The pinned request is `{ "userId": "demo-user", "query": "where does the user live" }`; the report lists each matching memory with its evidence, or with a note when nothing extracted it.
+2. Open **Respond with the memory** and choose **Execute step**. The pinned request is `{ "userId": "demo-user", "query": "where does the user live", "text": "The user lives in Madrid." }`. Run the trace again to see the corrected text.
+3. Open **Respond: thread forgotten** and choose **Execute step**. The pinned request is `{ "userId": "demo-user" }`, so the user's most recent session and the memories extracted from it go; add a `sessionId` from the report to pick a thread. Run the trace once more to see that they are gone.
+
+Pinned data applies to editor runs only. To call the live endpoints, activate the workflow and send the same bodies:
 
 ```bash
 curl -X POST https://your-n8n/webhook/memory/trace \
   -H 'Content-Type: application/json' \
   -d '{"userId": "demo-user", "query": "where does the user live"}'
 ```
-
-Take a `memoryId` and a `sessionId` from the report for the other two endpoints.
 
 ### Make it yours
 
