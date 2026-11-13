@@ -1,5 +1,5 @@
 {
-	"node": "@redis/n8n-nodes-agent-memory",
+	"node": "@redis/n8n-nodes-agent-memory.redisAgentMemory",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": ["Data & Storage"],
