@@ -11,7 +11,19 @@
 
 ```bash
 npm install
+npm run build   # writes dist/, the files package.json points n8n at
 ```
+
+## Constraints
+
+- **No runtime dependencies.** The node calls the Agent Memory REST API
+  through n8n's HTTP helpers, not through the `@redis-iris/agent-memory`
+  SDK. `@n8n/ai-node-sdk` and `n8n-workflow` are peer dependencies that n8n
+  provides.
+- **Strict lint rules.** `npm run lint` runs n8n's strict (Cloud-eligible)
+  rules, and n8n verification requires that they pass.
+- **The node never reads the environment.** Only the test harness does; n8n
+  verification forbids it in nodes.
 
 ## Quick validation
 
@@ -117,7 +129,8 @@ npm run e2e:down   # stop it
 
 ## Documentation
 
-- `README.md` is the user-facing documentation and is shown on npm.
+- `README.md` is the short overview shown on npm and GitHub. It links to the
+  guide for every detail; put new documentation in the guide, not the README.
 - `docs/` and `mkdocs.yml` are the guide at https://redis.github.io/n8n-nodes-agent-memory/,
   built with [MkDocs](https://www.mkdocs.org/) and the Material theme. See
   [Testing the guide](#testing-the-guide) below.
@@ -125,11 +138,12 @@ npm run e2e:down   # stop it
 - `docs/design-draft.md` holds the background and design decisions. It and
   `docs/0.3.0-features.md` are working documents, kept out of the guide by
   `exclude_docs` in `mkdocs.yml`.
-- `examples/` holds the workflows the README and `docs/examples.md` describe.
+- `examples/` holds the workflows `docs/examples.md` describes.
   When a node parameter changes, import them into n8n again to check that
   they still load and run, and update `docs/examples.md` when a workflow
   changes.
-- `AGENTS.md` and `.agents/` guide coding agents and contributors.
+- `AGENTS.md` and `.agents/` guide coding agents and contributors. `n8n-node`
+  generated them.
 
 ### Testing the guide
 
